@@ -1,0 +1,19 @@
+# systemd unit for the VulnIQ FastAPI backend.
+# Install: sudo cp deploy/vulniq-api.service /etc/systemd/system/ && sudo systemctl daemon-reload
+[Unit]
+Description=VulnIQ API (FastAPI/uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/vulniq/backend
+# The app reads /opt/vulniq/backend/.env itself; AWS creds come from the EC2
+# instance role (IMDS). Region is derived from the secret ARN if unset.
+ExecStart=/opt/vulniq/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

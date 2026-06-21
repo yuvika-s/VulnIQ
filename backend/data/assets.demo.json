@@ -1,0 +1,491 @@
+{
+  "assets": [
+    {
+      "asset_id": "trading-api-prod",
+      "name": "Trading API (Production)",
+      "tier": 0,
+      "internet_facing": true,
+      "data_classification": "customer_PII + trade_data + funds_movement",
+      "business_function": "Order execution & routing for retail clients",
+      "upstream_dependencies": [
+        "auth-service",
+        "kyc-service"
+      ],
+      "downstream_access": [
+        "trading-ledger-db",
+        "settlement-svc"
+      ],
+      "compensating_controls": [
+        "WAF",
+        "rate-limiting"
+      ],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "trading-ledger-db",
+      "name": "Trading Ledger Database",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "funds_movement + positions + settlement_records",
+      "business_function": "System of record for all client funds and positions",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [
+        "network_segmentation",
+        "encryption_at_rest"
+      ],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "kyc-service",
+      "name": "KYC Onboarding Service",
+      "tier": 0,
+      "internet_facing": true,
+      "data_classification": "PAN + Aadhaar + customer_PII + KYC_documents",
+      "business_function": "Customer identity verification & onboarding",
+      "upstream_dependencies": [
+        "auth-service"
+      ],
+      "downstream_access": [
+        "kyc-document-store"
+      ],
+      "compensating_controls": [
+        "WAF"
+      ],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "kyc-document-store",
+      "name": "KYC Document Store (S3)",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "PAN + Aadhaar + passport_scans + customer_PII",
+      "business_function": "Encrypted storage of regulated identity documents",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [
+        "bucket_policy",
+        "encryption_at_rest"
+      ],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "settlement-svc",
+      "name": "Settlement Service",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "funds_movement + bank_details",
+      "business_function": "End-of-day settlement and fund transfers",
+      "upstream_dependencies": [],
+      "downstream_access": [
+        "trading-ledger-db"
+      ],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "partner-portal-prod",
+      "name": "Partner & Sub-Broker Portal",
+      "tier": 1,
+      "internet_facing": true,
+      "data_classification": "partner_data + commission_records + client_mapping",
+      "business_function": "Sub-broker dashboard, commissions, client management",
+      "upstream_dependencies": [
+        "auth-service"
+      ],
+      "downstream_access": [
+        "settlement-svc"
+      ],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "auth-service",
+      "name": "Authentication Service",
+      "tier": 0,
+      "internet_facing": true,
+      "data_classification": "credentials + session_tokens + MFA_secrets",
+      "business_function": "Central authentication / SSO for all services",
+      "upstream_dependencies": [],
+      "downstream_access": [
+        "trading-api-prod",
+        "kyc-service",
+        "partner-portal-prod"
+      ],
+      "compensating_controls": [
+        "MFA",
+        "rate-limiting"
+      ],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "ci-jenkins-01",
+      "name": "CI/CD Build Server (Jenkins)",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "source_code + deploy_credentials + signing_keys",
+      "business_function": "Builds and deploys all production services",
+      "upstream_dependencies": [],
+      "downstream_access": [
+        "trading-api-prod",
+        "settlement-svc",
+        "kyc-service"
+      ],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "internal-hrms",
+      "name": "Internal HRMS",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "employee_PII",
+      "business_function": "Employee records and payroll",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [
+        "network_segmentation"
+      ],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "marketing-cms",
+      "name": "Marketing Website CMS",
+      "tier": 3,
+      "internet_facing": true,
+      "data_classification": "public_content",
+      "business_function": "Public marketing site",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [
+        "WAF",
+        "isolated_vpc"
+      ],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "data-core-pinot",
+      "name": "Data Core (Pinot)",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "analytics + customer_data",
+      "business_function": "Real-time analytics datastore (Principle 5: internal-ops critical)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "dc_platform",
+      "name": "Data Platform",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "platform + customer_data",
+      "business_function": "Core data platform (Principle 5)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "aws-terraform-platform",
+      "name": "AWS Terraform Platform (IaC)",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "infra_config + cloud_credentials",
+      "business_function": "Infrastructure-as-code for AWS (broad blast radius)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "treewalker-module",
+      "name": "Treewalker Module",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "TODO_verify",
+      "business_function": "TODO: verify service function",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "treewalker_module",
+      "name": "Treewalker Module (alt slug)",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "TODO_verify",
+      "business_function": "TODO: duplicate of treewalker-module? merge",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "bbe-nps",
+      "name": "BBE NPS",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "survey_data",
+      "business_function": "Net-promoter / feedback service",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "notificationservices-api-testautomation",
+      "name": "Notification Services API \u2014 Test Automation",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD test automation (not a crown jewel)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "NotificationServices_API_TestAutomation",
+      "name": "Notification Services API \u2014 Test Automation (alt slug)",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD; duplicate slug? merge",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "wmsMobileTestAutomation",
+      "name": "WMS Mobile Test Automation",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD test automation",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "ds_kyc_bot_poc",
+      "name": "KYC Bot PoC",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "PAN + Aadhaar + KYC_PII",
+      "business_function": "PoC handling KYC data \u2014 sensitive even if non-prod; VERIFY",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "camunda-bpmn-deployment",
+      "name": "Camunda BPMN Workflow Engine",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "workflow_definitions",
+      "business_function": "Business-process workflow engine",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "arq_v3",
+      "name": "ARQ v3",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "TODO_verify",
+      "business_function": "TODO: verify service function",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "nrms",
+      "name": "NRMS (Risk Management)",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "risk + positions",
+      "business_function": "Risk management system (Principle 4: trading impact)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "dp-data-core-airflow",
+      "name": "Data Core \u2014 Airflow Pipelines",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "pipeline_config + data",
+      "business_function": "Data pipeline orchestration",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "finone-finshorts-service-backend",
+      "name": "FinOne Finshorts Service (Backend)",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "customer_PII + lending_data",
+      "business_function": "Lending backend (Principle 4/5: customer-critical)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "rms-margin",
+      "name": "RMS Margin Service",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "margin + positions + funds",
+      "business_function": "Margin/risk service (Principle 4: trading impact)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "sre-tf-aws-cw-lambda",
+      "name": "SRE Terraform \u2014 CloudWatch Lambda (IaC)",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "infra_config",
+      "business_function": "SRE infra-as-code",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "ds-databricks-tf",
+      "name": "Databricks Terraform (IaC)",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "infra_config + data_access",
+      "business_function": "Databricks infra-as-code",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "inhouse-chart",
+      "name": "Inhouse Charting",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "market_data",
+      "business_function": "Charting service (RMS/Inhouse)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "taggingserv-perftesting",
+      "name": "Tagging Service \u2014 Perf Testing",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD perf testing",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "finone-monorepo",
+      "name": "FinOne Monorepo",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "customer_PII + lending_data",
+      "business_function": "Lending core monorepo (Principle 4/5)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "amx-extentreporterrors-analyser",
+      "name": "AMX Extent Report Errors Analyser",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD test reporting",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "amx-margin-maker",
+      "name": "AMX Margin Maker",
+      "tier": 0,
+      "internet_facing": false,
+      "data_classification": "margin + risk",
+      "business_function": "Margin computation (Principle 4: trading impact)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "delta",
+      "name": "Delta",
+      "tier": 2,
+      "internet_facing": false,
+      "data_classification": "TODO_verify",
+      "business_function": "TODO: verify service function",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "finone-release",
+      "name": "FinOne Release",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "lending_data + deploy",
+      "business_function": "Lending release/deploy (Principle 4/5)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": true
+    },
+    {
+      "asset_id": "customapi-perftesting",
+      "name": "Custom API \u2014 Perf Testing",
+      "tier": 3,
+      "internet_facing": false,
+      "data_classification": "test_data",
+      "business_function": "NON-PROD perf testing",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    },
+    {
+      "asset_id": "nxt-aws-terraform",
+      "name": "NXT AWS Terraform (IaC)",
+      "tier": 1,
+      "internet_facing": false,
+      "data_classification": "infra_config",
+      "business_function": "IaC for NXT (NXT app is internet-facing partner app)",
+      "upstream_dependencies": [],
+      "downstream_access": [],
+      "compensating_controls": [],
+      "is_crown_jewel": false
+    }
+  ]
+}

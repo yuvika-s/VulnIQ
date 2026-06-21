@@ -1,0 +1,10 @@
+{
+  "findings": [],
+  "golden_chains": {},
+  "meta": {
+    "total_findings": 153,
+    "planted_chains": 4,
+    "description": "Synthetic multi-tool, multi-layer findings with planted cross-layer attack chains for VulnIQ demo.",
+    "note": "Demo seed removed for real-data-only mode. Original at synthetic_findings.demo.json."
+  }
+}

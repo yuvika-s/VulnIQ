@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Never let the browser serve a stale build of this dashboard — it must always
+     pick up the latest JS so the live-data refresh logic is current. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>VulnIQ — Attack-Chain Prioritization Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Mono:wght@400;700&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0b; --bg2:#111114; --panel:#141419; --panel2:#1b1b21;
+  --line:#26262e; --line2:#363641;
+  --yellow:#f5e000; --yellow-dim:#bdab00;
+  --blue:#2f6bff; --blue-bright:#5b8cff;
+  --text:#f3f3f5; --muted:#8a8a94; --muted2:#5c5c66;
+  --crit:#ff3b4e; --week:#ff8c1a; --month:#ffc93c; --defer:#5c5c66; --green:#1fd17a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;-webkit-font-smoothing:antialiased}
+body{background-image:radial-gradient(circle at 12% -5%,rgba(47,107,255,.07),transparent 38%),radial-gradient(circle at 92% 6%,rgba(245,224,0,.045),transparent 42%);min-height:100vh;padding-bottom:40px}
+.mono{font-family:'Space Mono',monospace}
+.pixel{font-family:'VT323',monospace}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--blue)}
+
+/* ---- top bar ---- */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 26px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(10,10,11,.86);backdrop-filter:blur(12px);z-index:50}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{font-family:'VT323',monospace;font-size:38px;line-height:.8;color:var(--yellow);text-shadow:0 0 18px rgba(245,224,0,.35);letter-spacing:1px}
+.logo span{color:var(--blue-bright)}
+.tagline{font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-top:3px}
+.topstats{display:flex;gap:26px}
+.tstat{text-align:right}
+.tstat .v{font-family:'Space Mono',monospace;font-size:20px;font-weight:700}
+.tstat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.tstat .v.red{color:var(--crit)}.tstat .v.yl{color:var(--yellow)}.tstat .v.bl{color:var(--blue-bright)}.tstat .v.gr{color:var(--green)}
+
+/* ---- tabs ---- */
+.tabs{display:flex;gap:4px;padding:14px 26px 0;border-bottom:1px solid var(--line);background:var(--bg)}
+.tab{padding:11px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:9px 9px 0 0;transition:.16s;letter-spacing:.02em}
+.tab:hover{color:var(--text);background:var(--panel)}
+.tab.active{color:var(--yellow);background:var(--panel);border-color:var(--line);position:relative;top:1px}
+.tab .pixel{font-size:18px;margin-right:7px;vertical-align:-2px}
+
+.wrap{padding:24px 26px;max-width:1480px;margin:0 auto}
+.view{display:none;animation:fade .35s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.section-h{font-family:'VT323',monospace;font-size:26px;color:var(--text);margin-bottom:3px;letter-spacing:.5px}
+.section-h b{color:var(--yellow)}
+.section-sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+/* ---- cards / grid ---- */
+.grid{display:grid;gap:16px}
+.panel{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);border-radius:14px;padding:18px}
+.panel-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.panel-h h3{font-size:14px;font-weight:700;letter-spacing:.02em}
+.panel-h .hint{font-size:11px;color:var(--muted2)}
+
+/* ---- KPI hero ---- */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.kpi{background:linear-gradient(155deg,var(--panel2),var(--bg2));border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;position:relative;overflow:hidden}
+.kpi::after{content:'';position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;opacity:.12;background:var(--blue)}
+.kpi.k-red::after{background:var(--crit)}.kpi.k-yl::after{background:var(--yellow)}.kpi.k-gr::after{background:var(--green)}
+.kpi .num{font-family:'Space Mono',monospace;font-size:34px;font-weight:700;line-height:1}
+.kpi.k-red .num{color:var(--crit)}.kpi.k-yl .num{color:var(--yellow)}.kpi.k-bl .num{color:var(--blue-bright)}.kpi.k-gr .num{color:var(--green)}
+.kpi .lab{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.35}
+.kpi .sub{font-size:11px;color:var(--muted2);margin-top:4px}
+
+/* ---- priority list ---- */
+.tier-tag{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.tier-break_chain_critical{background:rgba(255,59,78,.15);color:var(--crit);border:1px solid rgba(255,59,78,.4)}
+.tier-patch_this_week{background:rgba(255,140,26,.13);color:var(--week);border:1px solid rgba(255,140,26,.35)}
+.tier-patch_this_month{background:rgba(255,201,60,.12);color:var(--month);border:1px solid rgba(255,201,60,.3)}
+.tier-defer{background:rgba(92,92,102,.13);color:var(--defer);border:1px solid rgba(92,92,102,.3)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+.finding-row{display:grid;grid-template-columns:84px 1fr auto;gap:14px;align-items:center;padding:13px 14px;border:1px solid var(--line);border-radius:11px;background:var(--bg2);cursor:pointer;transition:.14s;margin-bottom:8px}
+.finding-row:hover{border-color:var(--line2);background:var(--panel);transform:translateX(2px)}
+.finding-row.is-crit{border-left:3px solid var(--crit)}
+.fr-id{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)}
+.fr-title{font-size:13.5px;font-weight:600;margin-bottom:4px}
+.fr-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.chip{font-size:10px;padding:2px 7px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.chip.tool{color:var(--blue-bright)}
+.chip.kev{color:var(--crit);border-color:rgba(255,59,78,.3);background:rgba(255,59,78,.08)}
+.fr-right{text-align:right;min-width:120px}
+.fr-score{font-family:'Space Mono',monospace;font-size:18px;font-weight:700}
+.fr-chains{font-size:10px;color:var(--muted);margin-top:3px}
+
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filt{font-size:12px;padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--muted);cursor:pointer;transition:.14s}
+.filt:hover{color:var(--text);border-color:var(--line2)}
+.filt.active{background:var(--yellow);color:#000;border-color:var(--yellow);font-weight:700}
+
+/* ---- chains ---- */
+.chain-card{border:1px solid var(--line);border-radius:13px;padding:16px;background:var(--bg2);margin-bottom:12px;transition:.16s}
+.chain-card:hover{border-color:var(--line2)}
+.chain-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chain-id{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)}
+.chain-risk-badge{font-family:'Space Mono',monospace;font-weight:700;font-size:20px;padding:4px 12px;border-radius:9px}
+.risk-hi{color:var(--crit);background:rgba(255,59,78,.12)}
+.risk-md{color:var(--week);background:rgba(255,140,26,.12)}
+.risk-lo{color:var(--month);background:rgba(255,201,60,.1)}
+.chain-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.cnode{display:flex;flex-direction:column;gap:3px;padding:9px 12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);min-width:120px}
+.cnode .t{font-size:11px;font-weight:600;line-height:1.25}
+.cnode .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.cnode.entry{border-color:var(--blue)}
+.cnode.cj{border-color:var(--crit);background:rgba(255,59,78,.08)}
+.carrow{color:var(--yellow);font-size:18px;flex-shrink:0}
+.chain-narr{font-size:12.5px;color:var(--muted);line-height:1.55;border-top:1px solid var(--line);padding-top:11px}
+.chain-factors{display:flex;gap:14px;margin-top:11px;flex-wrap:wrap}
+.factor{font-size:10px;color:var(--muted2)}
+.factor b{color:var(--text);font-family:'Space Mono',monospace}
+
+/* ---- attack graph ---- */
+#graphWrap{position:relative;height:560px;border:1px solid var(--line);border-radius:13px;background:radial-gradient(circle at 50% 40%,#101015,#08080a);overflow:hidden}
+#graphSvg{width:100%;height:100%;cursor:grab}
+.glegend{position:absolute;top:14px;left:14px;background:rgba(10,10,11,.8);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:11px;backdrop-filter:blur(6px)}
+.glegend .li{display:flex;align-items:center;gap:8px;margin:5px 0;color:var(--muted)}
+.glegend .sw{width:12px;height:12px;border-radius:3px}
+.gtip{position:absolute;pointer-events:none;background:rgba(20,20,26,.97);border:1px solid var(--line2);border-radius:9px;padding:10px 12px;font-size:11.5px;max-width:280px;opacity:0;transition:opacity .12s;z-index:20;line-height:1.5}
+
+/* ---- charts ---- */
+.bars{display:flex;flex-direction:column;gap:9px}
+.bar-row{display:grid;grid-template-columns:120px 1fr 42px;gap:11px;align-items:center;font-size:12px}
+.bar-track{height:22px;background:var(--bg2);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar-fill{height:100%;border-radius:5px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.bar-row .cap{color:var(--muted);text-transform:capitalize}
+.bar-row .val{font-family:'Space Mono',monospace;text-align:right;color:var(--text)}
+
+.donut-wrap{display:flex;align-items:center;gap:24px}
+.donut-legend{display:flex;flex-direction:column;gap:9px;font-size:12px}
+.donut-legend .li{display:flex;align-items:center;gap:9px;color:var(--muted)}
+.donut-legend .li b{color:var(--text);font-family:'Space Mono',monospace;margin-left:auto;padding-left:18px}
+
+/* ---- agent ---- */
+.agent-panel{display:flex;flex-direction:column;height:620px}
+.chat-log{flex:1;overflow-y:auto;padding:6px 4px 6px 0;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:88%;font-size:13.5px;line-height:1.6}
+.msg.user{align-self:flex-end;background:var(--blue);color:#fff;padding:11px 15px;border-radius:13px 13px 4px 13px}
+.msg.bot{align-self:flex-start}
+.msg.bot .bubble{background:var(--panel2);border:1px solid var(--line);padding:13px 16px;border-radius:13px 13px 13px 4px}
+.msg.bot .bubble strong{color:var(--yellow)}
+.msg .who{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.tool-trace{margin-top:9px;font-size:10.5px;color:var(--muted2);font-family:'Space Mono',monospace;border-left:2px solid var(--blue);padding-left:9px}
+.tool-trace .tt{margin:2px 0}
+.tool-trace .tt::before{content:'⚡ ';color:var(--yellow)}
+.suggestions{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.sugg{font-size:11.5px;padding:7px 12px;border:1px solid var(--line2);border-radius:18px;color:var(--muted);cursor:pointer;transition:.14s;background:var(--bg2)}
+.sugg:hover{color:#000;background:var(--yellow);border-color:var(--yellow)}
+.chat-input{display:flex;gap:9px;margin-top:13px;border-top:1px solid var(--line);padding-top:14px}
+.chat-input input{flex:1;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:13px 15px;color:var(--text);font-size:13.5px;font-family:'Sora',sans-serif;outline:none}
+.chat-input input:focus{border-color:var(--blue)}
+.chat-input button{background:var(--yellow);color:#000;border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:13px;cursor:pointer;transition:.14s}
+.chat-input button:hover{background:#fff}
+.sim-result{margin-top:10px;padding:13px;border:1px solid var(--green);border-radius:11px;background:rgba(31,209,122,.07)}
+.sim-result .big{font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--green)}
+
+/* ---- brief ---- */
+.brief-doc{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line2);border-radius:16px;padding:32px;max-width:920px;margin:0 auto}
+.brief-head{border-bottom:2px solid var(--yellow);padding-bottom:18px;margin-bottom:24px}
+.brief-head h2{font-family:'VT323',monospace;font-size:34px;color:var(--yellow);letter-spacing:.5px}
+.brief-head .st{font-size:13px;color:var(--muted);margin-top:4px}
+.brief-head .for{font-size:11px;color:var(--muted2);margin-top:8px;text-transform:uppercase;letter-spacing:.1em}
+.brief-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px}
+.bk{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:15px}
+.bk .n{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:var(--blue-bright)}
+.bk .n.red{color:var(--crit)}.bk .n.gr{color:var(--green)}
+.bk .l{font-size:11px;color:var(--muted);margin-top:5px}
+.brief-sec-h{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--yellow);margin:24px 0 12px}
+.action-box{border:1px solid var(--green);background:rgba(31,209,122,.07);border-radius:12px;padding:18px;display:flex;align-items:center;gap:20px}
+.action-box .big{font-family:'Space Mono',monospace;font-size:30px;font-weight:700;color:var(--green);white-space:nowrap}
+.action-box .txt{font-size:13px;line-height:1.5}
+.action-box .txt b{color:var(--yellow)}
+.bchain{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:10px;background:var(--bg2)}
+.bchain .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.bchain .rk{font-family:'Space Mono',monospace;font-weight:700;color:var(--crit)}
+.bchain .nr{font-size:12px;color:var(--muted);line-height:1.5}
+.bchain .ctrls{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+.ctrl-tag{font-size:9.5px;padding:3px 8px;border-radius:6px;background:rgba(47,107,255,.1);border:1px solid rgba(47,107,255,.3);color:var(--blue-bright)}
+.compliance{font-size:11.5px;color:var(--muted);line-height:1.6;border-top:1px solid var(--line);padding-top:16px;margin-top:22px;font-style:italic}
+.btn-gen{background:var(--yellow);color:#000;border:none;border-radius:10px;padding:11px 20px;font-weight:700;font-size:13px;cursor:pointer}
+
+/* ---- finding modal ---- */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:30px}
+.modal-bg.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:16px;max-width:620px;width:100%;max-height:85vh;overflow-y:auto;padding:26px}
+.modal-close{float:right;cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
+.modal h3{font-size:18px;margin-bottom:6px;padding-right:30px}
+.modal .mid{font-family:'Space Mono',monospace;font-size:12px;color:var(--blue-bright);margin-bottom:16px}
+.modal .desc{font-size:13.5px;color:var(--muted);line-height:1.6;margin:14px 0;padding:14px;background:var(--bg2);border-radius:10px;border:1px solid var(--line)}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;font-size:12.5px;margin:12px 0}
+.kv .k{color:var(--muted2)}
+.kv .v{color:var(--text);font-family:'Space Mono',monospace}
+.modal-sim{margin-top:16px}
+
+.two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+@media(max-width:1100px){.two-col{grid-template-columns:1fr}.kpis,.brief-kpis{grid-template-columns:repeat(2,1fr)}}
+
+/* ---- AI pill (top bar) ---- */
+.ai-pill{display:flex;align-items:center;gap:9px;padding:8px 13px;border:1px solid var(--line2);border-radius:22px;background:linear-gradient(135deg,rgba(47,107,255,.12),rgba(245,224,0,.08));font-size:11px;cursor:help}
+.ai-dot{width:8px;height:8px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor}
+.ai-dot.on{background:var(--green);color:var(--green);animation:pulse 1.6s infinite}
+.ai-dot.off{background:var(--muted2);color:var(--muted2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.ai-model{font-family:'Space Mono',monospace;font-weight:700;color:var(--text)}
+.ai-mode{font-family:'Space Mono',monospace;font-size:10px;color:var(--yellow);padding:2px 6px;border-radius:4px;background:rgba(245,224,0,.1);border:1px solid rgba(245,224,0,.3)}
+.ai-pill .ai-mode{font-weight:700}
+.ai-roles{color:var(--muted);font-size:10px}
+
+/* ---- narrative badge on chain cards ---- */
+.narr-badge{display:inline-block;font-size:10px;font-family:'Space Mono',monospace;padding:2px 8px;border-radius:6px;margin-right:9px;font-weight:700;letter-spacing:.04em}
+.narr-badge.llm{background:rgba(47,107,255,.13);color:var(--blue-bright);border:1px solid rgba(47,107,255,.4)}
+.narr-badge.offline{background:rgba(92,92,102,.13);color:var(--muted);border:1px solid var(--line2)}
+
+/* ---- agent banner ---- */
+.agent-banner{display:flex;align-items:center;gap:11px;padding:11px 16px;border-radius:11px;font-size:12.5px;margin-bottom:14px;border:1px solid var(--line2)}
+.agent-banner.live{background:linear-gradient(135deg,rgba(31,209,122,.08),rgba(47,107,255,.06));border-color:rgba(31,209,122,.3)}
+.agent-banner.offline{background:var(--bg2)}
+.agent-banner b{color:var(--text)}
+
+/* ---- AI engine tab ---- */
+.ai-hero{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-bottom:20px;padding:22px 24px;border:1px solid var(--line2);border-radius:14px;background:linear-gradient(135deg,rgba(47,107,255,.07),rgba(245,224,0,.04))}
+.ai-hero-label{font-size:10px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;margin-bottom:6px}
+.ai-hero-model{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:var(--yellow);letter-spacing:.01em}
+.ai-hero-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.ai-status-pill{display:inline-flex;align-items:center;gap:9px;padding:8px 14px;border-radius:18px;font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:8px;border:1px solid var(--line2)}
+.ai-status-pill.live{color:var(--green);background:rgba(31,209,122,.1);border-color:rgba(31,209,122,.4)}
+.ai-status-pill.offline{color:var(--muted);background:var(--bg2)}
+.ai-status-note{font-size:12.5px;color:var(--muted);line-height:1.55}
+.ai-status-note .mono{font-family:'Space Mono',monospace;font-size:11px;color:var(--yellow);padding:1px 6px;background:var(--bg2);border-radius:4px;border:1px solid var(--line)}
+
+.role-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px}
+@media(max-width:1000px){.role-grid{grid-template-columns:1fr}}
+.role-card{border:1px solid var(--line);border-radius:13px;padding:18px;background:var(--bg2);transition:.15s}
+.role-card:hover{border-color:var(--line2);transform:translateY(-2px)}
+.role-head{display:flex;align-items:center;gap:11px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.role-icon{font-size:24px}
+.role-name{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--text)}
+.role-pattern{font-size:10.5px;color:var(--muted);margin-top:2px}
+.role-status{margin-left:auto;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:3px 9px;border-radius:5px;letter-spacing:.04em}
+.role-status.live{color:var(--green);background:rgba(31,209,122,.13);border:1px solid rgba(31,209,122,.4)}
+.role-status.off{color:var(--muted);background:var(--bg)}
+.role-what,.role-flow{font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:9px}
+.role-what b,.role-flow b{color:var(--text);font-weight:700;display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px;color:var(--yellow)}
+.role-io{display:grid;grid-template-columns:1fr;gap:7px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.io-l{display:inline-block;font-family:'Space Mono',monospace;font-size:9px;color:var(--blue-bright);letter-spacing:.1em;padding:2px 6px;border:1px solid rgba(47,107,255,.3);border-radius:4px;margin-right:7px;background:rgba(47,107,255,.05);font-weight:700}
+.role-tools{margin-top:11px;padding-top:10px;border-top:1px solid var(--line);font-size:11px}
+.tool-chip{display:inline-block;font-family:'Space Mono',monospace;font-size:10px;padding:3px 8px;margin:3px 4px 0 0;background:var(--panel2);border:1px solid var(--line2);border-radius:5px;color:var(--text)}
+
+.ai-flow{border:1px solid var(--line2);border-radius:14px;padding:22px;background:var(--bg2);margin-bottom:22px;overflow-x:auto}
+.ai-flow-title{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--yellow);letter-spacing:.1em;margin-bottom:14px}
+.ai-flow-row{display:flex;gap:8px;align-items:stretch;min-width:980px}
+.ai-step{flex:1;min-width:160px;padding:13px;border-radius:10px;border:1px solid var(--line)}
+.ai-step.det{background:rgba(92,92,102,.06);border-color:var(--line)}
+.ai-step.llm{background:rgba(47,107,255,.07);border-color:rgba(47,107,255,.35)}
+.ai-step-n{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.ai-step-t{font-size:11.5px;font-weight:700;color:var(--text);margin-bottom:7px;letter-spacing:.02em}
+.ai-step.llm .ai-step-t{color:var(--blue-bright)}
+.ai-step-d{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:9px}
+.ai-step-tag{font-family:'Space Mono',monospace;font-size:9.5px;color:var(--muted2);padding-top:7px;border-top:1px solid var(--line)}
+.ai-step.llm .ai-step-tag{color:var(--yellow)}
+.ai-arrow{display:flex;align-items:center;color:var(--yellow);font-size:18px;flex-shrink:0}
+
+.ai-why-title{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--yellow);letter-spacing:.1em;margin-bottom:14px}
+.ai-why-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:1000px){.ai-why-grid{grid-template-columns:repeat(2,1fr)}}
+.ai-why-card{padding:14px;background:var(--bg2);border:1px solid var(--line);border-radius:11px}
+.why-h{font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:6px}
+.why-b{font-size:11.5px;color:var(--muted);line-height:1.5}
+
+/* ---- upload tab ---- */
+.up-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:1100px){.up-grid{grid-template-columns:1fr}}
+.dropzone{border:2px dashed var(--line2);border-radius:16px;padding:44px 24px;text-align:center;cursor:pointer;transition:.18s;background:var(--bg2)}
+.dropzone:hover,.dropzone.drag{border-color:var(--yellow);background:rgba(245,224,0,.04)}
+.dz-icon{font-size:34px;color:var(--yellow);margin-bottom:10px}
+.dz-title{font-size:16px;font-weight:700;margin-bottom:6px}
+.dz-sub{font-size:12.5px;color:var(--muted)}
+.dz-browse{color:var(--blue-bright);text-decoration:underline;cursor:pointer}
+.up-mode{margin-top:14px;padding:11px 15px;border-radius:10px;font-size:12px;color:var(--muted);border:1px solid var(--line2);line-height:1.5;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.up-mode.live{border-color:rgba(31,209,122,.35);background:rgba(31,209,122,.06)}
+.up-mode.offline{background:var(--bg2)}
+.up-mode b{color:var(--text)}
+.up-mode .mono{font-family:'Space Mono',monospace;font-size:11px;color:var(--yellow);background:var(--bg);padding:1px 6px;border-radius:4px;border:1px solid var(--line)}
+.up-formats{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.fmt-card{display:flex;align-items:center;gap:14px;padding:13px 15px;border:1px solid var(--line);border-radius:11px;background:var(--bg2)}
+.fmt-x{font-family:'Space Mono',monospace;font-size:20px;color:var(--blue-bright);width:32px;text-align:center}
+.fmt-card b{font-size:13px}
+.fmt-card span:last-child{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+
+.pipe-file{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--bg2)}
+.pf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}
+.pf-name{font-size:13px;font-weight:600;font-family:'Space Mono',monospace}
+.pf-fmt{font-size:10px;font-family:'Space Mono',monospace;color:var(--blue-bright);padding:2px 8px;border:1px solid rgba(47,107,255,.3);border-radius:5px;background:rgba(47,107,255,.06)}
+.pf-steps{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.pf-step{font-size:11.5px;color:var(--muted2);padding:6px 11px;border-radius:7px;background:var(--bg);border:1px solid var(--line);transition:.2s}
+.pf-step.run{color:var(--yellow);border-color:rgba(245,224,0,.4);background:rgba(245,224,0,.05);animation:pulse 1.2s infinite}
+.pf-step.done{color:var(--green);border-color:rgba(31,209,122,.3)}
+.pf-step.done::after{content:' ✓';color:var(--green)}
+.pf-step.err{color:var(--crit);border-color:rgba(255,59,78,.4)}
+.pf-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.pf-stat{font-size:11px;padding:4px 10px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.pf-stat b{color:var(--text);font-family:'Space Mono',monospace}
+.pf-stat.ok b{color:var(--green)}.pf-stat.warn b{color:var(--week)}.pf-stat.ai{color:var(--blue-bright)}
+.pf-merge{font-size:12px;color:var(--muted);padding:9px 12px;background:rgba(255,59,78,.05);border:1px solid rgba(255,59,78,.2);border-radius:8px;margin-bottom:9px}
+.pf-merge b{font-family:'Space Mono',monospace;color:var(--text)}
+.pf-review{border-top:1px solid var(--line);padding-top:10px}
+.pf-review-h{font-size:11.5px;color:var(--week);font-weight:700;margin-bottom:8px}
+.pf-rev-row{font-size:11.5px;padding:7px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:4px}
+.pf-conf{font-family:'Space Mono',monospace;color:var(--week);font-size:10.5px}
+.pf-rev-reason{grid-column:1/-1;color:var(--muted2);font-size:10.5px;font-style:italic}
+.pf-err{color:var(--crit);font-size:12px;padding:8px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* Local dev (serve.py on :5500 or file://) talks to uvicorn on :8000.
+   Served behind nginx (Docker) -> same origin; nginx reverse-proxies /api. */
+window.VULNIQ_BACKEND = (location.protocol === 'file:' || location.port === '5500')
+  ? "http://localhost:8000" : location.origin;
+</script>
+<script>window.VULNIQ_DATA = {"ai_status":{"model":"claude-opus-4-7","llm_enabled":false,"mode":"offline_fallback","roles":[{"name":"extraction_normalization","purpose":"THE most crucial agent.","agentic_pattern":"deep-reading extraction + schema mapping + confidence"},{"name":"edge_inference","purpose":"Semantic edge inference for the attack graph.","agentic_pattern":"batched semantic classification + rationale"},{"name":"chain_narrator","purpose":"Per-chain breach-story generation.","agentic_pattern":"structured prompt -> natural language"},{"name":"dashboard_copilot","purpose":"Conversational copilot embedded in the dashboard.","agentic_pattern":"true ReAct-style tool-calling loop"}],"note":"VulnIQ uses a single strong model (Claude Opus 4.7) in three distinct agentic roles. Each role has a deterministic fallback so the pipeline runs end-to-end even when no API key is set, but with the API key present, every chain narrative is LLM-generated, every semantic edge is LLM-judged, and every dashboard question is answered by a real tool-calling agent."},"stats":{"total_findings":153,"total_assets":10,"crown_jewels":2,"total_chains":11,"correlation_clusters":24,"by_layer":{"appsec_runtime":30,"dependency":20,"source_code":15,"iam_identity":14,"infra_host":37,"cloud_config":15,"container":22},"by_priority":{"break_chain_critical":4,"patch_this_week":2,"patch_this_month":3,"defer":144},"by_tool":{"OWASP ZAP":15,"Trivy":23,"Semgrep":10,"Prowler":14,"Qualys":14,"Burp Suite":15,"ScoutSuite":1,"Nessus":23,"Wiz":14,"Checkmarx":5,"Snyk":19},"org_risk_score":489.9,"top_chain_risk":78.0},"findings":[{"finding_id":"F-00001","title":"Spring Boot Actuator endpoints exposed without auth","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"exposed_endpoint","cvss":6.5,"epss":0.39,"in_kev":false,"affected_asset_id":"partner-portal-prod","component":"spring-boot-actuator","cve":null,"cwe":"CWE-200","location":"https://partner.angelone.in/actuator/env","network_exposure":"internet","priority":"break_chain_critical","chain_count":3,"centrality":0.0,"final_score":190.0,"description":"The /actuator/env and /actuator/heapdump endpoints are publicly accessible on the partner portal, leaking environment variables and enabling heap inspection. Classified Medium in isolation."},{"finding_id":"F-00002","title":"Vulnerable Spring Framework (Spring4Shell RCE)","source_tool":"Trivy","layer":"dependency","finding_type":"CVE","cvss":9.8,"epss":0.972,"in_kev":true,"affected_asset_id":"partner-portal-prod","component":"spring-webmvc 5.3.17","cve":"CVE-2022-22965","cwe":"CWE-94","location":"","network_exposure":"internet","priority":"break_chain_critical","chain_count":5,"centrality":0.036,"final_score":447.0,"description":"partner-portal runs a Spring version vulnerable to Spring4Shell. Combined with an exposed actuator and bound request params, this permits remote code execution."},{"finding_id":"F-00003","title":"Hardcoded database credentials in settlement service","source_tool":"Semgrep","layer":"source_code","finding_type":"hardcoded_credentials","cvss":6.0,"epss":0.36,"in_kev":false,"affected_asset_id":"settlement-svc","component":"settlement-core","cve":null,"cwe":"CWE-798","location":"src/main/java/com/ao/settlement/Db.java:42","network_exposure":"internal","priority":"break_chain_critical","chain_count":7,"centrality":0.054,"final_score":397.7,"description":"A static DB username/password for the settlement DB user is committed in settlement-svc source. The user has elevated DB rights."},{"finding_id":"F-00004","title":"Settlement DB user has write access to trading ledger","source_tool":"Prowler","layer":"iam_identity","finding_type":"overprivileged_role","cvss":6.8,"epss":0.408,"in_kev":false,"affected_asset_id":"settlement-svc","component":"db-grant:settlement_user","cve":null,"cwe":"CWE-269","location":"","network_exposure":"internal","priority":"break_chain_critical","chain_count":5,"centrality":0.0,"final_score":209.0,"description":"The settlement service DB principal holds INSERT/UPDATE grants on the trading-ledger-db, exceeding least-privilege. Allows direct modification of fund/position records."},{"finding_id":"F-00005","title":"Log4Shell (Log4j2 JNDI RCE) on Trading API host","source_tool":"Qualys","layer":"infra_host","finding_type":"CVE","cvss":10.0,"epss":0.975,"in_kev":true,"affected_asset_id":"trading-api-prod","component":"log4j-core 2.14.1","cve":"CVE-2021-44228","cwe":"CWE-502","location":"","network_exposure":"internet","priority":"patch_this_week","chain_count":2,"centrality":0.0,"final_score":153.9,"description":"Trading API host runs a vulnerable Log4j2 version. Internet-facing and actively exploited in the wild. Grants remote code execution."},{"finding_id":"F-00006","title":"Server-Side Request Forgery in KYC document fetcher","source_tool":"Burp Suite","layer":"appsec_runtime","finding_type":"SSRF","cvss":8.1,"epss":0.48599999999999993,"in_kev":false,"affected_asset_id":"kyc-service","component":"kyc-doc-preview","cve":null,"cwe":"CWE-918","location":"POST /kyc/preview {url:...}","network_exposure":"internal","priority":"patch_this_month","chain_count":1,"centrality":0.0,"final_score":13.2,"description":"The KYC service document-preview feature fetches arbitrary URLs server-side, allowing access to internal metadata and the document store endpoint."},{"finding_id":"F-00007","title":"KYC document store bucket policy allows broad internal read","source_tool":"ScoutSuite","layer":"cloud_config","finding_type":"misconfig","cvss":6.5,"epss":0.39,"in_kev":false,"affected_asset_id":"kyc-document-store","component":"s3:kyc-document-store","cve":null,"cwe":"CWE-732","location":"","network_exposure":"internal","priority":"patch_this_month","chain_count":2,"centrality":0.0,"final_score":19.8,"description":"The kyc-document-store S3 bucket grants read to any principal in the VPC rather than only the KYC service role."},{"finding_id":"F-00010","title":"Jenkins build server reachable from marketing VPC","source_tool":"Wiz","layer":"cloud_config","finding_type":"misconfig","cvss":6.0,"epss":0.36,"in_kev":false,"affected_asset_id":"ci-jenkins-01","component":"sg:jenkins-admin","cve":null,"cwe":"CWE-923","location":"","network_exposure":"internal","priority":"patch_this_month","chain_count":1,"centrality":0.0,"final_score":11.2,"description":"Network policy allows the (supposedly isolated) marketing VPC to reach the CI/CD build server admin port."},{"finding_id":"F-00012","title":"SQL injection in auth-service login lookup","source_tool":"Checkmarx","layer":"source_code","finding_type":"SQLi","cvss":8.6,"epss":0.516,"in_kev":false,"affected_asset_id":"auth-service","component":"auth-login","cve":null,"cwe":"CWE-89","location":"src/auth/login_repo.py:88","network_exposure":"internet","priority":"patch_this_week","chain_count":1,"centrality":0.0,"final_score":34.9,"description":"User-supplied identifier is concatenated into a SQL query in the login path, allowing authentication logic bypass and credential table extraction."},{"finding_id":"F-00008","title":"Apache Struts2 RCE on marketing CMS","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":10.0,"epss":0.975,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00009","title":"Shared CI deploy token committed in marketing-cms repo","source_tool":"Semgrep","layer":"source_code","finding_type":"secret_leak","cvss":7.5,"epss":0.44999999999999996,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00011","title":"Jenkins deploy role can push to production trading API","source_tool":"Prowler","layer":"iam_identity","finding_type":"overprivileged_role","cvss":8.0,"epss":0.48,"in_kev":false,"affected_asset_id":"ci-jenkins-01","priority":"defer","chain_count":0},{"finding_id":"F-00013","title":"No rate limiting on auth token endpoint","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"missing_control","cvss":5.3,"epss":0.318,"in_kev":false,"affected_asset_id":"auth-service","priority":"defer","chain_count":0},{"finding_id":"F-00014","title":"Citrix-style info disclosure in test container [0]","source_tool":"Trivy","layer":"container","finding_type":"CVE","cvss":9.4,"epss":0.93,"in_kev":true,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00015","title":"Missing security header on marketing site [1]","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"misconfig","cvss":6.3,"epss":0.378,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00016","title":"Telnet open on lab device [2]","source_tool":"Nessus","layer":"infra_host","finding_type":"open_port","cvss":3.1,"epss":0.186,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00017","title":"Transitive dep CVE in HRMS (unreachable code path) [3]","source_tool":"Snyk","layer":"dependency","finding_type":"CVE","cvss":10.0,"epss":0.91,"in_kev":true,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00018","title":"Citrix-style info disclosure in test container [4]","source_tool":"Trivy","layer":"container","finding_type":"CVE","cvss":9.4,"epss":0.93,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00019","title":"Path traversal in internal report tool [5]","source_tool":"Checkmarx","layer":"source_code","finding_type":"path_traversal","cvss":6.1,"epss":0.366,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00020","title":"Missing security header on marketing site [6]","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"misconfig","cvss":3.5,"epss":0.21,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00021","title":"FortiOS OOB write on isolated mgmt appliance [7]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00022","title":"Missing security header on marketing site [8]","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"misconfig","cvss":7.4,"epss":0.444,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00023","title":"FortiOS OOB write on isolated mgmt appliance [9]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00024","title":"Transitive dep CVE in HRMS (unreachable code path) [10]","source_tool":"Snyk","layer":"dependency","finding_type":"CVE","cvss":10.0,"epss":0.91,"in_kev":true,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00025","title":"Transitive dep CVE in HRMS (unreachable code path) [11]","source_tool":"Snyk","layer":"dependency","finding_type":"CVE","cvss":10.0,"epss":0.91,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00026","title":"FortiOS OOB write on isolated mgmt appliance [12]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00027","title":"Citrix-style info disclosure in test container [13]","source_tool":"Trivy","layer":"container","finding_type":"CVE","cvss":9.4,"epss":0.93,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00028","title":"Use of MD5 for non-security checksum [14]","source_tool":"Semgrep","layer":"source_code","finding_type":"weak_crypto","cvss":5.7,"epss":0.342,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00029","title":"Reflected XSS in HRMS search (internal only) [15]","source_tool":"Burp Suite","layer":"appsec_runtime","finding_type":"XSS","cvss":4.7,"epss":0.28200000000000003,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00030","title":"Telnet open on lab device [16]","source_tool":"Nessus","layer":"infra_host","finding_type":"open_port","cvss":4.0,"epss":0.24,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00031","title":"Use of MD5 for non-security checksum [17]","source_tool":"Semgrep","layer":"source_code","finding_type":"weak_crypto","cvss":3.9,"epss":0.23399999999999999,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00032","title":"Telnet open on lab device [18]","source_tool":"Nessus","layer":"infra_host","finding_type":"open_port","cvss":4.8,"epss":0.288,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00033","title":"Unused IAM access key older than 90 days [19]","source_tool":"Prowler","layer":"iam_identity","finding_type":"misconfig","cvss":4.1,"epss":0.24599999999999997,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00034","title":"Reflected XSS in HRMS search (internal only) [20]","source_tool":"Burp Suite","layer":"appsec_runtime","finding_type":"XSS","cvss":4.6,"epss":0.27599999999999997,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00035","title":"Reflected XSS in HRMS search (internal only) [21]","source_tool":"Burp Suite","layer":"appsec_runtime","finding_type":"XSS","cvss":6.9,"epss":0.41400000000000003,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00036","title":"Citrix-style info disclosure in test container [22]","source_tool":"Trivy","layer":"container","finding_type":"CVE","cvss":9.4,"epss":0.93,"in_kev":true,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00037","title":"FortiOS OOB write on isolated mgmt appliance [23]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00038","title":"Unused IAM access key older than 90 days [24]","source_tool":"Prowler","layer":"iam_identity","finding_type":"misconfig","cvss":6.1,"epss":0.366,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00039","title":"Missing security header on marketing site [25]","source_tool":"OWASP ZAP","layer":"appsec_runtime","finding_type":"misconfig","cvss":5.0,"epss":0.3,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00040","title":"Outdated OpenSSL on isolated host [26]","source_tool":"Qualys","layer":"infra_host","finding_type":"CVE","cvss":7.5,"epss":0.12,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00041","title":"FortiOS OOB write on isolated mgmt appliance [27]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00042","title":"Use of MD5 for non-security checksum [28]","source_tool":"Semgrep","layer":"source_code","finding_type":"weak_crypto","cvss":5.2,"epss":0.312,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00043","title":"Use of MD5 for non-security checksum [29]","source_tool":"Semgrep","layer":"source_code","finding_type":"weak_crypto","cvss":4.1,"epss":0.24599999999999997,"in_kev":false,"affected_asset_id":"marketing-cms","priority":"defer","chain_count":0},{"finding_id":"F-00044","title":"FortiOS OOB write on isolated mgmt appliance [30]","source_tool":"Nessus","layer":"infra_host","finding_type":"CVE","cvss":9.8,"epss":0.88,"in_kev":true,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0},{"finding_id":"F-00045","title":"Reflected XSS in HRMS search (internal only) [31]","source_tool":"Burp Suite","layer":"appsec_runtime","finding_type":"XSS","cvss":7.3,"epss":0.438,"in_kev":false,"affected_asset_id":"internal-hrms","priority":"defer","chain_count":0}],"chains":[{"chain_id":"CH-0010","finding_ids":["F-00001","F-00002"],"asset_path":["partner-portal-prod","partner-portal-prod"],"entry_finding":"F-00001","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Spring Boot Actuator endpoints exposed without auth (OWASP ZAP, appsec_runtime) on partner-portal-prod \u2192 then Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 78.0).","chain_risk":78.0,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.78,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0005","finding_ids":["F-00002","F-00003"],"asset_path":["partner-portal-prod","settlement-svc"],"entry_finding":"F-00002","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 77.0).","chain_risk":77.0,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.77,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0003","finding_ids":["F-00005","F-00003"],"asset_path":["trading-api-prod","settlement-svc"],"entry_finding":"F-00005","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Log4Shell (Log4j2 JNDI RCE) on Trading API host (Qualys, infra_host) on trading-api-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 61.6).","chain_risk":61.6,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.77,"crown_jewel_value":1.0,"control_gap":0.8,"narrative_method":"deterministic"},{"chain_id":"CH-0004","finding_ids":["F-00002","F-00003","F-00004"],"asset_path":["partner-portal-prod","settlement-svc","settlement-svc"],"entry_finding":"F-00002","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 61.6).","chain_risk":61.6,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.616,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0009","finding_ids":["F-00001","F-00002","F-00003"],"asset_path":["partner-portal-prod","partner-portal-prod","settlement-svc"],"entry_finding":"F-00001","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Spring Boot Actuator endpoints exposed without auth (OWASP ZAP, appsec_runtime) on partner-portal-prod \u2192 then Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 60.1).","chain_risk":60.1,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.601,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0002","finding_ids":["F-00005","F-00003","F-00004"],"asset_path":["trading-api-prod","settlement-svc","settlement-svc"],"entry_finding":"F-00005","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Log4Shell (Log4j2 JNDI RCE) on Trading API host (Qualys, infra_host) on trading-api-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 49.3).","chain_risk":49.3,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.616,"crown_jewel_value":1.0,"control_gap":0.8,"narrative_method":"deterministic"},{"chain_id":"CH-0008","finding_ids":["F-00001","F-00002","F-00003","F-00004"],"asset_path":["partner-portal-prod","partner-portal-prod","settlement-svc","settlement-svc"],"entry_finding":"F-00001","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Spring Boot Actuator endpoints exposed without auth (OWASP ZAP, appsec_runtime) on partner-portal-prod \u2192 then Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 48.0).","chain_risk":48.0,"entry_exposure":1.0,"exploit_likelihood":1.0,"path_feasibility":0.48,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0007","finding_ids":["F-00012","F-00004"],"asset_path":["auth-service","settlement-svc"],"entry_finding":"F-00012","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting SQL injection in auth-service login lookup (Checkmarx, source_code) on auth-service \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 29.7).","chain_risk":29.7,"entry_exposure":1.0,"exploit_likelihood":0.516,"path_feasibility":0.72,"crown_jewel_value":1.0,"control_gap":0.8,"narrative_method":"deterministic"},{"chain_id":"CH-0001","finding_ids":["F-00003","F-00004"],"asset_path":["settlement-svc","settlement-svc"],"entry_finding":"F-00003","crown_jewel":"trading-ledger-db","narrative":"An attacker starts by exploiting Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 16.3).","chain_risk":16.3,"entry_exposure":0.5,"exploit_likelihood":0.408,"path_feasibility":0.8,"crown_jewel_value":1.0,"control_gap":1.0,"narrative_method":"deterministic"},{"chain_id":"CH-0011","finding_ids":["F-00006","F-00007"],"asset_path":["kyc-service","kyc-document-store"],"entry_finding":"F-00006","crown_jewel":"kyc-document-store","narrative":"An attacker starts by exploiting Server-Side Request Forgery in KYC document fetcher (Burp Suite, appsec_runtime) on kyc-service \u2192 then KYC document store bucket policy allows broad internal read (ScoutSuite, cloud_config) on kyc-document-store, ultimately reaching KYC Document Store (S3) (PAN + Aadhaar + passport_scans + customer_PII). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 8.3).","chain_risk":8.3,"entry_exposure":0.5,"exploit_likelihood":0.486,"path_feasibility":0.54,"crown_jewel_value":0.9,"control_gap":0.7,"narrative_method":"deterministic"},{"chain_id":"CH-0006","finding_ids":["F-00010","F-00007"],"asset_path":["ci-jenkins-01","kyc-document-store"],"entry_finding":"F-00010","crown_jewel":"kyc-document-store","narrative":"An attacker starts by exploiting Jenkins build server reachable from marketing VPC (Wiz, cloud_config) on ci-jenkins-01 \u2192 then KYC document store bucket policy allows broad internal read (ScoutSuite, cloud_config) on kyc-document-store, ultimately reaching KYC Document Store (S3) (PAN + Aadhaar + passport_scans + customer_PII). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 7.6).","chain_risk":7.6,"entry_exposure":0.5,"exploit_likelihood":0.39,"path_feasibility":0.54,"crown_jewel_value":0.9,"control_gap":0.8,"narrative_method":"deterministic"}],"graph":{"nodes":[{"id":"F-00012","kind":"finding","label":"SQL injection in auth-service login lookup","layer":"source_code","tool":"Checkmarx","priority":"patch_this_week","asset":"auth-service","cvss":8.6,"in_kev":false},{"id":"F-00007","kind":"finding","label":"KYC document store bucket policy allows broad internal read","layer":"cloud_config","tool":"ScoutSuite","priority":"patch_this_month","asset":"kyc-document-store","cvss":6.5,"in_kev":false},{"id":"F-00004","kind":"finding","label":"Settlement DB user has write access to trading ledger","layer":"iam_identity","tool":"Prowler","priority":"break_chain_critical","asset":"settlement-svc","cvss":6.8,"in_kev":false},{"id":"F-00003","kind":"finding","label":"Hardcoded database credentials in settlement service","layer":"source_code","tool":"Semgrep","priority":"break_chain_critical","asset":"settlement-svc","cvss":6.0,"in_kev":false},{"id":"F-00002","kind":"finding","label":"Vulnerable Spring Framework (Spring4Shell RCE)","layer":"dependency","tool":"Trivy","priority":"break_chain_critical","asset":"partner-portal-prod","cvss":9.8,"in_kev":true},{"id":"F-00001","kind":"finding","label":"Spring Boot Actuator endpoints exposed without auth","layer":"appsec_runtime","tool":"OWASP ZAP","priority":"break_chain_critical","asset":"partner-portal-prod","cvss":6.5,"in_kev":false},{"id":"F-00006","kind":"finding","label":"Server-Side Request Forgery in KYC document fetcher","layer":"appsec_runtime","tool":"Burp Suite","priority":"patch_this_month","asset":"kyc-service","cvss":8.1,"in_kev":false},{"id":"F-00010","kind":"finding","label":"Jenkins build server reachable from marketing VPC","layer":"cloud_config","tool":"Wiz","priority":"patch_this_month","asset":"ci-jenkins-01","cvss":6.0,"in_kev":false},{"id":"F-00005","kind":"finding","label":"Log4Shell (Log4j2 JNDI RCE) on Trading API host","layer":"infra_host","tool":"Qualys","priority":"patch_this_week","asset":"trading-api-prod","cvss":10.0,"in_kev":true},{"id":"ci-jenkins-01","kind":"asset","label":"CI/CD Build Server (Jenkins)","tier":1,"is_crown_jewel":false},{"id":"auth-service","kind":"asset","label":"Authentication Service","tier":0,"is_crown_jewel":false},{"id":"trading-api-prod","kind":"asset","label":"Trading API (Production)","tier":0,"is_crown_jewel":false},{"id":"kyc-service","kind":"asset","label":"KYC Onboarding Service","tier":0,"is_crown_jewel":false},{"id":"settlement-svc","kind":"asset","label":"Settlement Service","tier":0,"is_crown_jewel":false},{"id":"kyc-document-store","kind":"crown_jewel","label":"KYC Document Store (S3)","tier":0,"is_crown_jewel":true},{"id":"partner-portal-prod","kind":"asset","label":"Partner & Sub-Broker Portal","tier":1,"is_crown_jewel":false}],"edges":[{"source":"F-00001","target":"F-00002","kind":"ENABLES","confidence":0.78,"rationale":"exposed surface is the delivery vector for the co-located CVE"},{"source":"F-00002","target":"F-00003","kind":"ENABLES","confidence":0.77,"rationale":"code execution allows reading committed secrets; pivots across a network/dependency reachability edge"},{"source":"F-00005","target":"F-00003","kind":"ENABLES","confidence":0.77,"rationale":"code execution allows reading committed secrets; pivots across a network/dependency reachability edge"},{"source":"F-00003","target":"F-00004","kind":"ENABLES","confidence":0.8,"rationale":"stolen credentials assume the over-privileged role"},{"source":"F-00012","target":"F-00004","kind":"ENABLES","confidence":0.72,"rationale":"stolen credentials assume the over-privileged role; pivots across a network/dependency reachability edge"},{"source":"F-00006","target":"F-00007","kind":"ENABLES","confidence":0.54,"rationale":"read/lateral access reaches the misconfigured resource; pivots across a network/dependency reachability edge"},{"source":"F-00010","target":"F-00007","kind":"ENABLES","confidence":0.54,"rationale":"read/lateral access reaches the misconfigured resource; pivots across a network/dependency reachability edge"},{"source":"F-00012","target":"auth-service","kind":"EXPOSES","confidence":1.0},{"source":"F-00007","target":"kyc-document-store","kind":"EXPOSES","confidence":1.0},{"source":"F-00004","target":"settlement-svc","kind":"EXPOSES","confidence":1.0},{"source":"F-00003","target":"settlement-svc","kind":"EXPOSES","confidence":1.0},{"source":"F-00002","target":"partner-portal-prod","kind":"EXPOSES","confidence":1.0},{"source":"F-00001","target":"partner-portal-prod","kind":"EXPOSES","confidence":1.0},{"source":"F-00006","target":"kyc-service","kind":"EXPOSES","confidence":1.0},{"source":"F-00010","target":"ci-jenkins-01","kind":"EXPOSES","confidence":1.0},{"source":"F-00005","target":"trading-api-prod","kind":"EXPOSES","confidence":1.0}]},"brief":{"title":"VulnIQ Executive Security Brief","subtitle":"Context-aware, attack-chain-prioritized exposure summary","generated_for":"Angel One \u2014 CISO / Risk Committee","headline":{"org_risk_score":489.9,"active_attack_chains":11,"crown_jewels_reachable":1,"total_findings":153,"deferred_as_noise":144,"noise_reduction_pct":94.1},"recommended_first_action":{"finding_id":"F-00003","title":"Hardcoded database credentials in settlement service","chains_collapsed":7,"risk_drop_pct":74.8},"top_attack_chains":[{"chain_id":"CH-0010","risk":78.0,"crown_jewel":"trading-ledger-db","path":["F-00001","F-00002"],"narrative":"An attacker starts by exploiting Spring Boot Actuator endpoints exposed without auth (OWASP ZAP, appsec_runtime) on partner-portal-prod \u2192 then Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 78.0).","controls":["ISO 27001 A.8.20 (network security)","ISO 27001 A.8.8 (technical vulnerability mgmt)","RBI: Patch management","SEBI CSCRF: Network segmentation","SEBI CSCRF: Vulnerability mgmt"]},{"chain_id":"CH-0005","risk":77.0,"crown_jewel":"trading-ledger-db","path":["F-00002","F-00003"],"narrative":"An attacker starts by exploiting Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 77.0).","controls":["ISO 27001 A.8.24 (key mgmt)","ISO 27001 A.8.8 (technical vulnerability mgmt)","RBI: Application security controls","RBI: Patch management","SEBI CSCRF: Secure SDLC","SEBI CSCRF: Vulnerability mgmt"]},{"chain_id":"CH-0003","risk":61.6,"crown_jewel":"trading-ledger-db","path":["F-00005","F-00003"],"narrative":"An attacker starts by exploiting Log4Shell (Log4j2 JNDI RCE) on Trading API host (Qualys, infra_host) on trading-api-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 61.6).","controls":["ISO 27001 A.8.24 (key mgmt)","ISO 27001 A.8.8 (technical vulnerability mgmt)","RBI: Application security controls","RBI: Patch management","SEBI CSCRF: Secure SDLC","SEBI CSCRF: Vulnerability mgmt"]},{"chain_id":"CH-0004","risk":61.6,"crown_jewel":"trading-ledger-db","path":["F-00002","F-00003","F-00004"],"narrative":"An attacker starts by exploiting Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc \u2192 then Settlement DB user has write access to trading ledger (Prowler, iam_identity) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 61.6).","controls":["ISO 27001 A.5.15 (access control)","ISO 27001 A.8.24 (key mgmt)","ISO 27001 A.8.8 (technical vulnerability mgmt)","RBI: Access management","RBI: Application security controls","RBI: Patch management","SEBI CSCRF: Least privilege","SEBI CSCRF: Secure SDLC","SEBI CSCRF: Vulnerability mgmt"]},{"chain_id":"CH-0009","risk":60.1,"crown_jewel":"trading-ledger-db","path":["F-00001","F-00002","F-00003"],"narrative":"An attacker starts by exploiting Spring Boot Actuator endpoints exposed without auth (OWASP ZAP, appsec_runtime) on partner-portal-prod \u2192 then Vulnerable Spring Framework (Spring4Shell RCE) (Trivy, dependency) on partner-portal-prod \u2192 then Hardcoded database credentials in settlement service (Semgrep, source_code) on settlement-svc, ultimately reaching Trading Ledger Database (funds_movement + positions + settlement_records). Individually these are lower-severity findings from different tools; chained, they form a critical path (risk 60.1).","controls":["ISO 27001 A.8.20 (network security)","ISO 27001 A.8.24 (key mgmt)","ISO 27001 A.8.8 (technical vulnerability mgmt)","RBI: Application security controls","RBI: Patch management","SEBI CSCRF: Network segmentation","SEBI CSCRF: Secure SDLC","SEBI CSCRF: Vulnerability mgmt"]}],"break_chain_critical_findings":[{"finding_id":"F-00002","title":"Vulnerable Spring Framework (Spring4Shell RCE)","asset":"partner-portal-prod","cvss":9.8,"chains":5,"controls":["ISO 27001 A.8.8 (technical vulnerability mgmt)","SEBI CSCRF: Vulnerability mgmt","RBI: Patch management"]},{"finding_id":"F-00003","title":"Hardcoded database credentials in settlement service","asset":"settlement-svc","cvss":6.0,"chains":7,"controls":["ISO 27001 A.8.24 (key mgmt)","SEBI CSCRF: Secure SDLC","RBI: Application security controls"]},{"finding_id":"F-00004","title":"Settlement DB user has write access to trading ledger","asset":"settlement-svc","cvss":6.8,"chains":5,"controls":["ISO 27001 A.5.15 (access control)","SEBI CSCRF: Least privilege","RBI: Access management"]},{"finding_id":"F-00001","title":"Spring Boot Actuator endpoints exposed without auth","asset":"partner-portal-prod","cvss":6.5,"chains":3,"controls":["ISO 27001 A.8.20 (network security)","SEBI CSCRF: Network segmentation"]}],"compliance_note":"Prioritization decisions in this brief are risk-based and auditable, supporting SEBI CSCRF vulnerability-management requirements, ISO 27001 Annex A.8.8, and RBI cyber-resilience expectations. Every ranking is traceable to the contributing findings, threat intelligence (EPSS/CISA KEV), and asset context."},"assets":[{"asset_id":"trading-api-prod","name":"Trading API (Production)","tier":0,"internet_facing":true,"data_classification":"customer_PII + trade_data + funds_movement","business_function":"Order execution & routing for retail clients","upstream_dependencies":["auth-service","kyc-service"],"downstream_access":["trading-ledger-db","settlement-svc"],"compensating_controls":["WAF","rate-limiting"],"is_crown_jewel":false},{"asset_id":"trading-ledger-db","name":"Trading Ledger Database","tier":0,"internet_facing":false,"data_classification":"funds_movement + positions + settlement_records","business_function":"System of record for all client funds and positions","upstream_dependencies":[],"downstream_access":[],"compensating_controls":["network_segmentation","encryption_at_rest"],"is_crown_jewel":true},{"asset_id":"kyc-service","name":"KYC Onboarding Service","tier":0,"internet_facing":true,"data_classification":"PAN + Aadhaar + customer_PII + KYC_documents","business_function":"Customer identity verification & onboarding","upstream_dependencies":["auth-service"],"downstream_access":["kyc-document-store"],"compensating_controls":["WAF"],"is_crown_jewel":false},{"asset_id":"kyc-document-store","name":"KYC Document Store (S3)","tier":0,"internet_facing":false,"data_classification":"PAN + Aadhaar + passport_scans + customer_PII","business_function":"Encrypted storage of regulated identity documents","upstream_dependencies":[],"downstream_access":[],"compensating_controls":["bucket_policy","encryption_at_rest"],"is_crown_jewel":true},{"asset_id":"settlement-svc","name":"Settlement Service","tier":0,"internet_facing":false,"data_classification":"funds_movement + bank_details","business_function":"End-of-day settlement and fund transfers","upstream_dependencies":[],"downstream_access":["trading-ledger-db"],"compensating_controls":[],"is_crown_jewel":false},{"asset_id":"partner-portal-prod","name":"Partner & Sub-Broker Portal","tier":1,"internet_facing":true,"data_classification":"partner_data + commission_records + client_mapping","business_function":"Sub-broker dashboard, commissions, client management","upstream_dependencies":["auth-service"],"downstream_access":["settlement-svc"],"compensating_controls":[],"is_crown_jewel":false},{"asset_id":"auth-service","name":"Authentication Service","tier":0,"internet_facing":true,"data_classification":"credentials + session_tokens + MFA_secrets","business_function":"Central authentication / SSO for all services","upstream_dependencies":[],"downstream_access":["trading-api-prod","kyc-service","partner-portal-prod"],"compensating_controls":["MFA","rate-limiting"],"is_crown_jewel":false},{"asset_id":"ci-jenkins-01","name":"CI/CD Build Server (Jenkins)","tier":1,"internet_facing":false,"data_classification":"source_code + deploy_credentials + signing_keys","business_function":"Builds and deploys all production services","upstream_dependencies":[],"downstream_access":["trading-api-prod","settlement-svc","kyc-service"],"compensating_controls":[],"is_crown_jewel":false},{"asset_id":"internal-hrms","name":"Internal HRMS","tier":3,"internet_facing":false,"data_classification":"employee_PII","business_function":"Employee records and payroll","upstream_dependencies":[],"downstream_access":[],"compensating_controls":["network_segmentation"],"is_crown_jewel":false},{"asset_id":"marketing-cms","name":"Marketing Website CMS","tier":3,"internet_facing":true,"data_classification":"public_content","business_function":"Public marketing site","upstream_dependencies":[],"downstream_access":[],"compensating_controls":["WAF","isolated_vpc"],"is_crown_jewel":false}]};</script>
+<script>/* ===================== VulnIQ Dashboard App ===================== */
+/* D and its derived views start from the baked-in snapshot, but are reassigned
+   by applyData() whenever live backend data is loaded (on startup + after each
+   upload), so every page reflects the cumulative state of the session. */
+let D = window.VULNIQ_DATA;
+let F = D.findings, CH = D.chains, S = D.stats, G = D.graph, BR = D.brief;
+let ASSETS = {}; (D.assets||[]).forEach(a=>ASSETS[a.asset_id]=a);
+let fmap = {}; F.forEach(f=>fmap[f.finding_id]=f);
+
+function applyData(nd){
+  D = nd;
+  F = D.findings||[]; CH = D.chains||[]; S = D.stats||{};
+  // defensive defaults so a historical/partial snapshot can never throw inside a
+  // render function (which would silently leave the previous run on screen)
+  S.by_tool=S.by_tool||{}; S.by_layer=S.by_layer||{}; S.by_priority=S.by_priority||{};
+  S.by_source=S.by_source||{}; S.by_objective=S.by_objective||{};
+  G = D.graph||{nodes:[],edges:[]}; BR = D.brief||{};
+  BR.headline=BR.headline||{};
+  ASSETS = {}; (D.assets||[]).forEach(a=>ASSETS[a.asset_id]=a);
+  fmap = {}; F.forEach(f=>fmap[f.finding_id]=f);
+}
+
+const TIER_LABEL = {
+  break_chain_critical:'Break-Chain Critical', patch_this_week:'Patch This Week',
+  patch_this_month:'Patch This Month', defer:'Lower priority'
+};
+// Severity from the source tool (Snyk / manual report) — independent of
+// VulnIQ's chain-aware priority. Used to label "Lower priority" findings
+// with the severity their originating scanner actually assigned.
+const SEV_COLOR = {critical:'#ff3b4e', high:'#ff8c1a', medium:'#ffc93c', low:'#7c83fd', info:'#5c5c66'};
+function sevLabel(f){
+  const raw = (f.raw_severity||'').toString().toLowerCase().trim();
+  if(SEV_COLOR[raw]) return raw;
+  // Fall back to CVSS-derived severity so non-Snyk uploads without a
+  // tool-native severity still get a useful chip.
+  const c = +f.cvss || 0;
+  if(c >= 9) return 'critical';
+  if(c >= 7) return 'high';
+  if(c >= 4) return 'medium';
+  if(c > 0)  return 'low';
+  return 'info';
+}
+const TIER_COLOR = {break_chain_critical:'var(--crit)',patch_this_week:'var(--week)',patch_this_month:'var(--month)',defer:'var(--defer)'};
+const LAYER_COLOR = {appsec_runtime:'#2f6bff',dependency:'#9b6bff',source_code:'#ff8c1a',iam_identity:'#1fd17a',infra_host:'#ff3b4e',cloud_config:'#00c2d1',container:'#ffc93c',network:'#f5e000',data:'#ff5bb0'};
+const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const fmtScore = n => n>=1000?(n/1000).toFixed(1)+'k':Math.round(n);
+
+/* ---------- shell ---------- */
+function shell(){
+  const r = document.getElementById('root');
+  r.innerHTML = `
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">VULN<span>IQ</span></div>
+      <div><div style="font-size:13px;font-weight:700">Attack-Chain Prioritization Engine</div>
+      <div class="tagline">Unified · Multi-Layer · Context-Aware</div></div>
+    </div>
+    <div class="topstats">
+      <div class="ai-pill" id="aiPill" title="${esc(D.ai_status.note)}">
+        <span class="ai-dot ${D.ai_status.llm_enabled?'on':'off'}" id="aiDot"></span>
+        <span class="ai-model">${esc(D.ai_status.model)}</span>
+        <span class="ai-mode" id="aiMode">${D.ai_status.llm_enabled?'LIVE':'OFFLINE'}</span>
+        <span class="ai-roles">${D.ai_status.roles.length} agents</span>
+      </div>
+      <button id="refreshBtn" onclick="loadLiveData('manual')" title="Re-pull the latest findings, chains, graph & brief from the backend"
+        style="cursor:pointer;border:1px solid var(--line2);background:var(--bg2);color:var(--text);font:600 12px/1 inherit;padding:8px 12px;border-radius:9px;display:flex;align-items:center;gap:6px">↻ <span id="refreshLbl">Refresh</span></button>
+      <div class="tstat"><div class="v red" id="tb-chains">${S.total_chains}</div><div class="l">Attack Chains</div></div>
+      <div class="tstat"><div class="v yl" id="tb-risk">${BR.headline.org_risk_score}</div><div class="l">Org Risk</div></div>
+      <div class="tstat"><div class="v bl" id="tb-findings">${S.total_findings}</div><div class="l">Findings</div></div>
+      <div class="tstat"><div class="v gr" id="tb-noise">${BR.headline.noise_reduction_pct}%</div><div class="l">Noise Cut</div></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-v="overview"><span class="pixel">[#]</span>Overview</div>
+    <div class="tab" data-v="upload"><span class="pixel">[^]</span>Upload Findings</div>
+    <div class="tab" data-v="priorities"><span class="pixel">[!]</span>Priorities</div>
+    <div class="tab" data-v="chains"><span class="pixel">[>]</span>Attack Chains</div>
+    <div class="tab" data-v="graph"><span class="pixel">[*]</span>Attack Graph</div>
+    <div class="tab" data-v="agent"><span class="pixel">[?]</span>Ask VulnIQ</div>
+    <div class="tab" data-v="ownership"><span class="pixel">[@]</span>Ownership</div>
+    <div class="tab" data-v="ai"><span class="pixel">[~]</span>AI Engine</div>
+    <div class="tab" data-v="history"><span class="pixel">[~]</span>History</div>
+    <div class="tab" data-v="brief"><span class="pixel">[=]</span>Exec Brief</div>
+  </div>
+  <div class="wrap">
+    <div class="view active" id="v-overview"></div>
+    <div class="view" id="v-upload"></div>
+    <div class="view" id="v-priorities"></div>
+    <div class="view" id="v-chains"></div>
+    <div class="view" id="v-graph"></div>
+    <div class="view" id="v-agent"></div>
+    <div class="view" id="v-ownership"></div>
+    <div class="view" id="v-ai"></div>
+    <div class="view" id="v-history"></div>
+    <div class="view" id="v-brief"></div>
+  </div>
+  <div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>`;
+
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const v = t.dataset.v;
+    document.getElementById('v-'+v).classList.add('active');
+    if(v==='graph') setTimeout(drawGraph,40);
+  });
+  document.getElementById('modalBg').onclick=e=>{if(e.target.id==='modalBg')closeModal();};
+
+  renderOverview(); renderUpload(); renderPriorities(); renderChains(); renderGraphView(); renderAgent(); renderOwnership(); renderAI(); renderBrief();
+}
+
+/* ---------- overview ---------- */
+function renderOverview(){
+  const h = BR.headline;
+  const crit = F.filter(f=>f.priority==='break_chain_critical').sort((a,b)=>b.final_score-a.final_score);
+  document.getElementById('v-overview').innerHTML = `
+  <div class="section-h">SECURITY <b>POSTURE</b></div>
+  <div class="section-sub">What ${S.total_findings} findings from ${Object.keys(S.by_tool).length} tools across ${Object.keys(S.by_layer).length} layers actually mean — chained into real breach paths.</div>
+  <div class="kpis">
+    <div class="kpi k-red"><div class="num">${S.total_chains}</div><div class="lab">Cross-layer attack chains to crown jewels</div><div class="sub">No single tool sees these</div></div>
+    <div class="kpi k-yl"><div class="num">${h.org_risk_score}</div><div class="lab">Aggregate org risk score</div><div class="sub">Top-10 chain weighted</div></div>
+    <div class="kpi k-bl"><div class="num">${S.correlation_clusters}</div><div class="lab">Correlation clusters found</div><div class="sub">Shared root causes</div></div>
+    <div class="kpi k-gr"><div class="num">${h.noise_reduction_pct}%</div><div class="lab">Findings deprioritized as noise</div><div class="sub">${h.deferred_as_noise} of ${S.total_findings} are not on any chain</div></div>
+  </div>
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-h"><h3>🔴 Break-Chain Critical — fix these first</h3><span class="hint">on the most breach paths</span></div>
+      <div id="ov-crit"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>Findings by OSI Layer</h3><span class="hint">${S.total_findings} total</span></div>
+      <div class="bars" id="ov-layers"></div>
+      <div class="panel-h" style="margin-top:22px"><h3>Priority Distribution</h3></div>
+      <div class="donut-wrap"><canvas id="ov-donut" width="150" height="150"></canvas><div class="donut-legend" id="ov-donut-leg"></div></div>
+    </div>
+  </div>`;
+
+  document.getElementById('ov-crit').innerHTML = crit.map(f=>findingRow(f)).join('');
+  bindRows('ov-crit');
+
+  // layer bars
+  const maxL = Math.max(...Object.values(S.by_layer));
+  document.getElementById('ov-layers').innerHTML = Object.entries(S.by_layer)
+    .sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+    <div class="bar-row"><span class="cap">${k.replace(/_/g,' ')}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:0%;background:${LAYER_COLOR[k]||'var(--blue)'}" data-w="${v/maxL*100}"></div></div>
+      <span class="val">${v}</span></div>`).join('');
+  setTimeout(()=>document.querySelectorAll('#ov-layers .bar-fill').forEach(b=>b.style.width=b.dataset.w+'%'),60);
+
+  drawDonut();
+}
+
+function drawDonut(){
+  const c = document.getElementById('ov-donut'); if(!c) return;
+  const ctx = c.getContext('2d');
+  const data = S.by_priority;
+  const order=['break_chain_critical','patch_this_week','patch_this_month','defer'];
+  const total = Object.values(data).reduce((a,b)=>a+b,0);
+  let start=-Math.PI/2;
+  order.forEach(k=>{
+    const val=data[k]||0; if(!val)return;
+    const ang=val/total*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(75,75);
+    ctx.arc(75,75,72,start,start+ang);ctx.closePath();
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue(TIER_COLOR[k].replace('var(','').replace(')','')).trim()||'#555';
+    ctx.fill();start+=ang;
+  });
+  ctx.beginPath();ctx.arc(75,75,44,0,Math.PI*2);ctx.fillStyle='#0a0a0b';ctx.fill();
+  ctx.fillStyle='#f3f3f5';ctx.font='bold 22px Space Mono';ctx.textAlign='center';
+  ctx.fillText(total,75,72);ctx.fillStyle='#8a8a94';ctx.font='10px Sora';ctx.fillText('FINDINGS',75,88);
+  document.getElementById('ov-donut-leg').innerHTML = order.filter(k=>data[k]).map(k=>`
+    <div class="li"><span class="dot" style="background:${TIER_COLOR[k]}"></span>${TIER_LABEL[k]}<b>${data[k]}</b></div>`).join('');
+}
+
+/* ---------- priorities ---------- */
+let curFilter='all';
+function renderPriorities(){
+  document.getElementById('v-priorities').innerHTML = `
+  <div class="section-h">PRIORITIZED <b>FINDINGS</b></div>
+  <div class="section-sub">Ranked by attack-chain centrality, not raw CVSS. A "Medium" on 7 chains beats a "Critical" on none.</div>
+  <div class="filters" id="prio-filters">
+    <div class="filt active" data-f="all">All on chains</div>
+    <div class="filt" data-f="break_chain_critical">🔴 Break-Chain Critical</div>
+    <div class="filt" data-f="patch_this_week">🟠 This Week</div>
+    <div class="filt" data-f="patch_this_month">🟡 This Month</div>
+    <div class="filt" data-f="defer">⚪ Lower priority</div>
+  </div>
+  <div id="prio-list"></div>`;
+  document.querySelectorAll('#prio-filters .filt').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#prio-filters .filt').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');curFilter=b.dataset.f;paintPrio();
+  });
+  paintPrio();
+}
+function paintPrio(){
+  let list = F.slice();
+  if(curFilter==='all') list=list.filter(f=>f.chain_count>0);
+  else if(curFilter==='defer') list=list.filter(f=>f.priority==='defer');
+  else list=list.filter(f=>f.priority===curFilter);
+  // collapse by remediation group — one row per actual fix, with an instance count
+  const groups={};
+  for(const f of list){ const k=f.remediation_group||f.finding_id; (groups[k]=groups[k]||[]).push(f); }
+  const rows=Object.values(groups).map(members=>{
+    members.sort((a,b)=>(b.final_score||0)-(a.final_score||0));
+    const instances=members.reduce((s,f)=>s+(f.duplicate_count||1),0);
+    return {rep:members[0], members, instances};
+  });
+  rows.sort((a,b)=>(b.rep.final_score||0)-(a.rep.final_score||0));
+  const el=document.getElementById('prio-list');
+  if(!rows.length){el.innerHTML=`<div class="panel" style="text-align:center;color:var(--muted)">No findings in this tier.</div>`;return;}
+  const collapsed=list.length-rows.length;
+  el.innerHTML=(collapsed>0?`<div style="font-size:11px;color:var(--muted2);margin-bottom:10px">▾ ${rows.length} remediation items · ${collapsed} duplicate/related finding${collapsed>1?'s':''} grouped</div>`:'')
+    + rows.slice(0,60).map(g=>findingRow(g.rep,g)).join('')
+    + (curFilter==='defer'?`<div style="text-align:center;color:var(--muted2);font-size:12px;margin-top:10px">…showing a sample. ${S.by_priority.defer} findings total — still real findings, just lower priority because they don't sit on a viable attack chain right now. Severity shown is what the source tool assigned.</div>`:'');
+  bindRows('prio-list');
+}
+
+function findingRow(f, group){
+  const crit = f.priority==='break_chain_critical';
+  const instances = group?group.instances:(f.duplicate_count||1);
+  const others = group?group.members.filter(m=>m.finding_id!==f.finding_id):[];
+  const instBadge = instances>1?`<span class="chip" style="background:rgba(124,131,253,.15);color:var(--blue);font-weight:700">⊕ ${instances}× same fix</span>`:'';
+  const action = f.remediation_action?`<span class="chip" style="opacity:.8">🔧 ${esc(f.remediation_action)}</span>`:'';
+  const otherLine = others.length?`<div style="font-size:10px;color:var(--muted2);margin-top:4px">grouped: ${others.slice(0,6).map(m=>esc(m.finding_id)).join(', ')}${others.length>6?` +${others.length-6} more`:''}</div>`:'';
+  return `<div class="finding-row ${crit?'is-crit':''}" data-fid="${f.finding_id}">
+    <div><div class="fr-id">${f.finding_id}</div><div style="margin-top:6px"><span class="tier-tag tier-${f.priority}"><span class="dot" style="background:${TIER_COLOR[f.priority]}"></span></span></div></div>
+    <div>
+      <div class="fr-title">${esc(f.title)} ${instBadge}</div>
+      ${otherLine}
+      <div class="fr-meta">
+        ${action}
+        ${(()=>{const sv=sevLabel(f),col=SEV_COLOR[sv]||'#5c5c66';return `<span class="chip" style="background:${col}22;color:${col};border:1px solid ${col}55;font-weight:700;letter-spacing:.3px">${sv.toUpperCase()}</span>`;})()}
+        ${((f.sources&&f.sources.length?f.sources:[f.source_tool])).map(s=>`<span class="chip tool" ${String(s).startsWith('Snyk')?'style="background:rgba(124,131,253,.14);color:var(--blue)"':''}>${String(s).startsWith('Snyk')?'⚡ ':''}${esc(s)}</span>`).join('')}
+        <span class="chip">${f.layer.replace(/_/g,' ')}</span>
+        <span class="chip">${esc(f.affected_asset_id)}</span>
+        ${f.location&&f.location.indexOf('repo:')===0?`<span class="chip" style="opacity:.7">${esc(f.location)}</span>`:''}
+        ${(f.attack_objectives||[]).slice(0,2).map(o=>`<span class="chip" style="background:rgba(255,59,78,.12);color:var(--crit)">🎯 ${esc(o.replace(/_/g,' '))}</span>`).join('')}
+        ${f.in_kev?'<span class="chip kev">CISA KEV</span>':''}
+        <span>CVSS ${f.cvss}</span>
+        <span>EPSS ${(f.epss*100).toFixed(0)}%</span>
+      </div>
+    </div>
+    <div class="fr-right">
+      ${f.priority_p?`<div class="fr-plevel" style="font-weight:800;font-size:15px;letter-spacing:1px;color:${TIER_COLOR[f.priority]}">${f.priority_p}</div>`:''}
+      <div class="fr-score" style="color:${f.chain_count>0?TIER_COLOR[f.priority]:'var(--muted2)'}">${fmtScore(f.final_score||0)}</div>
+      <div class="fr-chains">${f.chains_collapsed>0?`⚡ breaks ${f.chains_collapsed} chain${f.chains_collapsed>1?'s':''}${f.crown_paths_collapsed>0?` · ${f.crown_paths_collapsed} crown`:''}`:(f.chain_count>0?`on ${f.chain_count} chain${f.chain_count>1?'s':''}`:'no chain')}</div>
+      ${f.remediation_leverage_label&&f.remediation_leverage_label!=='None'?`<div style="font-size:10px;margin-top:2px;font-weight:700;color:${f.remediation_leverage_label==='Very High'?'var(--crit)':f.remediation_leverage_label==='High'?'var(--week)':'var(--muted2)'}">leverage ${f.remediation_leverage_label}</div>`:''}
+    </div>
+  </div>`;
+}
+function bindRows(id){document.querySelectorAll('#'+id+' .finding-row').forEach(r=>r.onclick=()=>openFinding(r.dataset.fid));}
+
+/* ---------- chains ---------- */
+/* Per-chain LLM narratives are fetched lazily on click (keeps the bulk refresh
+   free). Cached by the chain's finding sequence so it survives re-renders and
+   even chain-id changes after a recompute. */
+const chainNarrCache = {};
+
+function renderChains(){
+  document.getElementById('v-chains').innerHTML = `
+  <div class="section-h">ATTACK <b>CHAINS</b></div>
+  <div class="section-sub">Paths from an exposed entry point through capability handoffs to a crown jewel. Each ChainRisk = exposure × exploitability × feasibility × jewel-value × control-gap.</div>
+  <div id="chain-list"></div>`;
+  document.getElementById('chain-list').innerHTML = CH.map(chainCard).join('');
+}
+function chainNarrInner(c){
+  const sig = c.finding_ids.join('>');
+  const cached = chainNarrCache[sig];
+  const narr = cached ? cached.narrative : c.narrative;
+  const method = cached ? cached.method : c.narrative_method;
+  const isLLM = method==='llm';
+  const badge = `<span class="narr-badge ${isLLM?'llm':'offline'}" title="${isLLM?'LLM-generated by '+esc(D.ai_status.model):'Deterministic fallback'}">${isLLM?'🧠 LLM · '+esc(D.ai_status.model):'⚙ offline narrator'}</span>`;
+  const btn = (BACKEND_URL && !isLLM)
+    ? `<button class="narr-ai-btn" onclick="loadChainNarrative('${c.chain_id}')" title="Generate an LLM attack narrative for this chain" style="cursor:pointer;border:1px solid var(--line2);background:transparent;color:var(--blue);font-size:11px;font-family:inherit;padding:2px 9px;border-radius:6px;margin-left:8px">✨ Get AI narrative</button>`
+    : '';
+  return `${badge}${btn}<div class="narr-text" style="margin-top:6px">${esc(narr)}</div>`;
+}
+function chainCard(c){
+  const rk = c.chain_risk>=70?'risk-hi':c.chain_risk>=50?'risk-md':'risk-lo';
+  const nodes = c.finding_ids.map((fid,i)=>{
+    const f=fmap[fid]; const isEntry=i===0; const isLast=i===c.finding_ids.length-1;
+    return `<div class="cnode ${isEntry?'entry':''}" data-fid="${fid}">
+      <span class="l">${f?f.source_tool:'?'} · ${f?f.layer.replace(/_/g,' '):''}</span>
+      <span class="t">${f?esc(f.title.slice(0,42)):fid}</span></div>`;
+  });
+  const cjAsset = ASSETS[c.crown_jewel];
+  const flow = nodes.join('<span class="carrow">→</span>')
+    + `<span class="carrow">→</span><div class="cnode cj"><span class="l">CROWN JEWEL</span><span class="t">${cjAsset?esc(cjAsset.name):esc(c.crown_jewel)}</span></div>`;
+  const ap = c.attack_path||{};
+  const orScore = c.objective_reachability_score||0;
+  const realism = c.realism_score||0;
+  const realCol = realism>=60?'var(--ok)':realism>=35?'var(--week)':'var(--muted2)';
+  const goal = ap.attacker_goal || (c.primary_objective||'').replace(/_/g,' ');
+  const apBlock = ap.attacker_goal?`<div class="attack-path" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;line-height:1.7">
+      <div><span style="color:var(--muted2);display:inline-block;width:104px">🎯 Goal</span><b>${esc(ap.attacker_goal)}</b></div>
+      <div><span style="color:var(--muted2);display:inline-block;width:104px">Initial access</span>${esc(ap.initial_access||'')}</div>
+      <div><span style="color:var(--muted2);display:inline-block;width:104px">Pivot path</span>${(ap.pivot_path||[]).map(esc).join(' → ')}</div>
+      <div><span style="color:var(--muted2);display:inline-block;width:104px">Privilege esc</span>${(ap.privilege_escalation||[]).map(esc).join(', ')}</div>
+      <div><span style="color:var(--muted2);display:inline-block;width:104px">Impact</span>${esc(ap.impact||'')}</div>
+    </div>`:'';
+  const conf = c.chain_confidence||0;
+  const confCol = conf>=65?'var(--ok)':conf>=50?'var(--week)':'var(--crit)';
+  const specBadge = c.speculative?`<span title="below confidence threshold — does not escalate priority" style="font-size:9px;font-weight:700;color:var(--muted2);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;margin-left:8px">SPECULATIVE</span>`:'';
+  const evSteps = c.evidence_steps||[];
+  const evBlock = evSteps.length?`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--blue)">🔎 Why this chain is valid · <b style="color:${confCol}">confidence ${conf}</b></summary>
+    <div style="margin-top:8px;font-size:12px;line-height:1.65;border-left:2px solid var(--line2);padding-left:12px">
+    ${evSteps.map(s=>{
+       if(s.kind==='node') return `<div><b>${esc(s.title)}</b> <span style="color:var(--muted2)">— ${esc(s.detail||'')}</span></div>`;
+       if(s.kind==='edge') return `<div style="color:var(--muted)">↓ <span style="color:var(--week)">${esc((s.handoff||[]).join(', ')||'handoff')}</span> · ${esc(s.why||'')} <span style="opacity:.65">[${esc(s.verdict||'')} · ${s.confidence}%]</span></div>`;
+       if(s.kind==='objective') return `<div style="margin-top:4px">🎯 <b>Objective: ${esc(s.objective||'')}</b> · <span style="color:${confCol}">confidence ${s.chain_confidence}</span></div>`;
+       return '';
+    }).join('')}
+    </div></details>`:'';
+  const prods=(c.products||[]);
+  const prodBadges=prods.length?`<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap">${prods.map(p=>`<span class="chip" ${String(p).startsWith('Snyk')?'style="background:rgba(124,131,253,.14);color:var(--blue)"':'style="background:rgba(255,201,60,.12);color:var(--month)"'}>${String(p).startsWith('Snyk')?'⚡ ':'📄 '}${esc(p)}</span>`).join('')}${c.num_products>1?`<span class="chip" style="background:rgba(255,59,78,.15);color:var(--crit);font-weight:700">${c.num_products} products · ${c.num_assets} assets</span>`:''}</div>`:'';
+  return `<div class="chain-card" style="${c.speculative?'opacity:.72':''}">
+    <div class="chain-top">
+      <span class="chain-id">${c.chain_id} · ${c.finding_ids.length} hops · 🎯 ${esc(goal||'crown jewel')}${specBadge}</span>
+      <span class="chain-risk-badge ${rk}">${c.chain_risk}</span>
+    </div>
+    ${prodBadges}
+    <div class="chain-flow">${flow}</div>
+    ${apBlock}
+    ${evBlock}
+    <div class="chain-narr" id="cn-${c.chain_id}">${chainNarrInner(c)}</div>
+    <div class="chain-factors">
+      <span class="factor" style="color:${confCol}">confidence <b>${conf}</b></span>
+      <span class="factor" style="color:var(--crit)">objective reach <b>${orScore}</b></span>
+      <span class="factor" style="color:${realCol}">realism <b>${realism}</b></span>
+      <span class="factor">exposure <b>${c.entry_exposure}</b></span>
+      <span class="factor">exploit <b>${c.exploit_likelihood}</b></span>
+      <span class="factor">feasibility <b>${c.path_feasibility}</b></span>
+      <span class="factor">control-gap <b>${c.control_gap}</b></span>
+    </div>
+  </div>`;
+}
+
+/* Fetch the on-demand LLM narrative for one chain and swap it in place.
+   The backend caches by finding-sequence, so repeat clicks/recomputes are free. */
+async function loadChainNarrative(cid){
+  const el = document.getElementById('cn-'+cid);
+  const c = CH.find(x=>x.chain_id===cid);
+  if(!el || !c) return;
+  const btn = el.querySelector('.narr-ai-btn');
+  if(btn){ btn.disabled=true; btn.textContent='✨ generating…'; btn.style.opacity=.6; }
+  try{
+    const d = await fetch(BACKEND_URL+'/api/chains/'+encodeURIComponent(cid)).then(r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    });
+    const method = d.narrative_method || 'llm';
+    chainNarrCache[c.finding_ids.join('>')] = {narrative:d.narrative, method};
+    el.innerHTML = chainNarrInner(c);  // re-reads the cache we just populated
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='✨ Get AI narrative'; btn.style.opacity=1; }
+    const t=document.createElement('div');
+    t.style.cssText='color:var(--muted);font-size:12px;margin-top:6px';
+    t.textContent='AI narrative unavailable: '+e.message;
+    el.appendChild(t);
+    console.warn('chain narrative failed', e);
+  }
+}
+
+/* ---------- graph view ---------- */
+function renderGraphView(){
+  document.getElementById('v-graph').innerHTML = `
+  <div class="section-h">ATTACK <b>GRAPH</b></div>
+  <div class="section-sub">The unified graph across all tools and layers, restricted to nodes on the top attack chains. Drag nodes; hover for detail.</div>
+  <div id="graphWrap">
+    <svg id="graphSvg"></svg>
+    <div class="glegend">
+      <div class="li"><span class="sw" style="background:var(--crit)"></span>Crown jewel</div>
+      <div class="li"><span class="sw" style="background:var(--blue)"></span>Asset</div>
+      <div class="li"><span class="sw" style="background:var(--yellow)"></span>Finding (on chain)</div>
+      <div class="li"><span style="width:20px;border-top:2px solid var(--yellow)"></span>ENABLES (attacker pivot)</div>
+      <div class="li"><span style="width:20px;border-top:2px dashed var(--muted)"></span>EXPOSES</div>
+    </div>
+    <div class="gtip" id="gtip"></div>
+  </div>`;
+}
+
+let gSim=null;
+function drawGraph(){
+  const svg=document.getElementById('graphSvg'); if(!svg||svg.dataset.drawn)return;
+  const W=svg.clientWidth||1200,H=svg.clientHeight||560;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const nodes=G.nodes.map(n=>({...n,x:W/2+(Math.random()-.5)*300,y:H/2+(Math.random()-.5)*240,vx:0,vy:0}));
+  const idx={};nodes.forEach((n,i)=>idx[n.id]=i);
+  const links=G.edges.filter(e=>idx[e.source]!=null&&idx[e.target]!=null)
+    .map(e=>({...e,s:idx[e.source],t:idx[e.target]}));
+
+  const NS='http://www.w3.org/2000/svg';
+  while(svg.firstChild)svg.removeChild(svg.firstChild);
+  const defs=document.createElementNS(NS,'defs');
+  defs.innerHTML=`<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f5e000"/></marker>`;
+  svg.appendChild(defs);
+  const gLinks=document.createElementNS(NS,'g'),gNodes=document.createElementNS(NS,'g');
+  svg.appendChild(gLinks);svg.appendChild(gNodes);
+
+  const lineEls=links.map(l=>{
+    const ln=document.createElementNS(NS,'line');
+    const enable=l.kind==='ENABLES';
+    ln.setAttribute('stroke',enable?'#f5e000':'#444');
+    ln.setAttribute('stroke-width',enable?2:1);
+    ln.setAttribute('stroke-dasharray',enable?'0':'4 4');
+    ln.setAttribute('opacity',enable?.85:.4);
+    if(enable)ln.setAttribute('marker-end','url(#arrow)');
+    gLinks.appendChild(ln);return ln;
+  });
+  const nodeEls=nodes.map(n=>{
+    const g=document.createElementNS(NS,'g');g.style.cursor='grab';
+    const isF=n.kind==='finding',isCJ=n.kind==='crown_jewel';
+    const r=isCJ?15:isF?9:12;
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('r',r);
+    c.setAttribute('fill',isCJ?'#ff3b4e':isF?'#f5e000':'#2f6bff');
+    c.setAttribute('stroke','#0a0a0b');c.setAttribute('stroke-width',2);
+    if(n.in_kev){c.setAttribute('stroke','#ff3b4e');c.setAttribute('stroke-width',3);}
+    g.appendChild(c);
+    const t=document.createElementNS(NS,'text');
+    t.textContent=isF?n.id:(n.label||n.id).slice(0,18);
+    t.setAttribute('font-size',isF?9:10);t.setAttribute('fill',isF?'#cfcf55':'#cdd6ff');
+    t.setAttribute('text-anchor','middle');t.setAttribute('dy',r+13);
+    t.setAttribute('font-family','Space Mono, monospace');
+    g.appendChild(t);
+    gNodes.appendChild(g);
+    g.addEventListener('mouseenter',e=>showTip(e,n));
+    g.addEventListener('mouseleave',hideTip);
+    g.addEventListener('mousedown',e=>startDrag(e,n));
+    g.addEventListener('click',()=>{if(n.kind==='finding')openFinding(n.id);});
+    return g;
+  });
+
+  function tick(){
+    // forces
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        const a=nodes[i],b=nodes[j];let dx=a.x-b.x,dy=a.y-b.y;let d=Math.sqrt(dx*dx+dy*dy)||1;
+        const rep=2600/(d*d);a.vx+=dx/d*rep;a.vy+=dy/d*rep;b.vx-=dx/d*rep;b.vy-=dy/d*rep;
+      }
+    }
+    links.forEach(l=>{
+      const a=nodes[l.s],b=nodes[l.t];let dx=b.x-a.x,dy=b.y-a.y;let d=Math.sqrt(dx*dx+dy*dy)||1;
+      const k=(d-115)*0.015;a.vx+=dx/d*k;a.vy+=dy/d*k;b.vx-=dx/d*k;b.vy-=dy/d*k;
+    });
+    nodes.forEach(n=>{
+      n.vx+=(W/2-n.x)*0.002;n.vy+=(H/2-n.y)*0.002;
+      n.vx*=.86;n.vy*=.86;
+      if(!n.fixed){n.x+=n.vx;n.y+=n.vy;}
+      n.x=Math.max(40,Math.min(W-40,n.x));n.y=Math.max(40,Math.min(H-50,n.y));
+    });
+    lineEls.forEach((ln,i)=>{const l=links[i];ln.setAttribute('x1',nodes[l.s].x);ln.setAttribute('y1',nodes[l.s].y);ln.setAttribute('x2',nodes[l.t].x);ln.setAttribute('y2',nodes[l.t].y);});
+    nodeEls.forEach((g,i)=>g.setAttribute('transform',`translate(${nodes[i].x},${nodes[i].y})`));
+  }
+  let frames=0;
+  function loop(){tick();frames++;if(frames<600&&!dragNode)gSim=requestAnimationFrame(loop);else if(dragNode)gSim=requestAnimationFrame(loop);}
+  loop();
+
+  // drag
+  let dragNode=null,offset={x:0,y:0};
+  function startDrag(e,n){dragNode=n;n.fixed=true;const p=pt(e);offset={x:p.x-n.x,y:p.y-n.y};if(!gSim)loop();}
+  function pt(e){const r=svg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
+  svg.addEventListener('mousemove',e=>{if(dragNode){const p=pt(e);dragNode.x=p.x-offset.x;dragNode.y=p.y-offset.y;dragNode.vx=dragNode.vy=0;}});
+  window.addEventListener('mouseup',()=>{if(dragNode){dragNode.fixed=false;dragNode=null;}});
+  svg.dataset.drawn='1';
+}
+function showTip(e,n){
+  const tip=document.getElementById('gtip');
+  let html='';
+  if(n.kind==='finding'){const f=fmap[n.id];
+    html=`<b style="color:var(--yellow)">${n.id}</b> · ${esc(n.tool)}<br>${esc(n.label)}<br><span style="color:var(--muted)">${n.layer} · CVSS ${n.cvss}${n.in_kev?' · <span style="color:var(--crit)">KEV</span>':''}</span>${f?'<br><span style="color:var(--muted2)">click to inspect</span>':''}`;
+  } else {
+    html=`<b style="color:${n.kind==='crown_jewel'?'var(--crit)':'var(--blue-bright)'}">${esc(n.label)}</b><br><span style="color:var(--muted)">${n.kind==='crown_jewel'?'👑 Crown jewel asset':'Asset · tier '+n.tier}</span>`;
+  }
+  tip.innerHTML=html;tip.style.opacity=1;
+  const wrap=document.getElementById('graphWrap').getBoundingClientRect();
+  tip.style.left=Math.min(e.clientX-wrap.left+14,wrap.width-290)+'px';
+  tip.style.top=(e.clientY-wrap.top+10)+'px';
+}
+function hideTip(){document.getElementById('gtip').style.opacity=0;}
+
+/* ---------- finding modal ---------- */
+function openFinding(fid){
+  const f=fmap[fid];if(!f)return;
+  const onChains=CH.filter(c=>c.finding_ids.includes(fid));
+  document.getElementById('modalBody').innerHTML=`
+    <span class="modal-close" onclick="closeModal()">×</span>
+    <h3>${esc(f.title)}</h3>
+    <div class="mid">${f.finding_id} · ${esc(f.source_tool)} · ${esc(f.cwe||'')} ${esc(f.cve||'')}</div>
+    <span class="tier-tag tier-${f.priority}"><span class="dot" style="background:${TIER_COLOR[f.priority]}"></span>${TIER_LABEL[f.priority]}</span>
+    <div class="desc">${esc(f.description||'No description.')}</div>
+    <div class="kv">
+      <span class="k">Asset</span><span class="v">${esc(f.affected_asset_id)}</span>
+      <span class="k">Layer</span><span class="v">${f.layer}</span>
+      <span class="k">CVSS</span><span class="v">${f.cvss}</span>
+      <span class="k">EPSS (exploit prob)</span><span class="v">${(f.epss*100).toFixed(1)}%</span>
+      <span class="k">CISA KEV</span><span class="v" style="color:${f.in_kev?'var(--crit)':'var(--muted)'}">${f.in_kev?'YES — actively exploited':'no'}</span>
+      <span class="k">Network exposure</span><span class="v">${f.network_exposure||'internal'}</span>
+      <span class="k">On attack chains</span><span class="v">${f.chain_count||0}</span>
+      <span class="k">Chain centrality</span><span class="v">${f.centrality||0}</span>
+      ${f.location?`<span class="k">Location</span><span class="v" style="font-size:11px">${esc(f.location)}</span>`:''}
+    </div>
+    ${onChains.length?`<div class="brief-sec-h">Appears on chains</div>${onChains.map(c=>`<div style="font-size:12px;color:var(--muted);margin:4px 0">• <b style="color:var(--crit)">${c.chain_id}</b> (risk ${c.chain_risk}) → ${esc(c.crown_jewel)}</div>`).join('')}`:''}
+    <div class="modal-sim">
+      <button class="btn-gen" onclick="modalSim('${fid}')">⚡ Simulate patching this finding</button>
+      <div id="modalSimRes"></div>
+    </div>`;
+  document.getElementById('modalBg').classList.add('show');
+}
+function closeModal(){document.getElementById('modalBg').classList.remove('show');}
+function modalSim(fid){
+  const r=simulatePatch([fid]);
+  document.getElementById('modalSimRes').innerHTML=`<div class="sim-result">
+    <div class="big">−${r.risk_drop_pct}%</div>
+    <div style="font-size:13px;margin-top:6px">Patching <b>${fid}</b> collapses <b style="color:var(--green)">${r.chains_collapsed} of ${r.chains_before}</b> attack chains and drops org risk from ${r.org_risk_before} to <b>${r.org_risk_after}</b>.</div>
+  </div>`;
+}
+
+/* ---------- patch simulation (client-side, mirrors backend) ---------- */
+function simulatePatch(ids){
+  // Mirror the backend formula exactly (engine.simulate_patch + engine.stats):
+  // sum chain_risk across ALL chains, not just the top 10. Top-10 made small
+  // patches read as 0% drop when the collapsed chains weren't in the lead,
+  // and made the modal disagree with the brief's recommended-action figure.
+  const set=new Set(ids);
+  const before=CH.length;
+  const beforeRisk=Math.round(CH.reduce((a,c)=>a+(c.chain_risk||0),0)*10)/10;
+  const surviving=CH.filter(c=>!c.finding_ids.some(f=>set.has(f)));
+  const after=surviving.length;
+  const afterRisk=Math.round(surviving.reduce((a,c)=>a+(c.chain_risk||0),0)*10)/10;
+  return {patched:ids,chains_before:before,chains_after:after,chains_collapsed:before-after,
+    org_risk_before:beforeRisk,org_risk_after:afterRisk,
+    risk_drop_pct:beforeRisk?Math.round((beforeRisk-afterRisk)/beforeRisk*1000)/10:0};
+}
+function bestSingleFix(){
+  const cands=F.filter(f=>f.chain_count>0).sort((a,b)=>b.chain_count-a.chain_count).slice(0,8);
+  let best=null;
+  cands.forEach(f=>{const s=simulatePatch([f.finding_id]);s.finding_id=f.finding_id;s.title=f.title;
+    if(!best||s.risk_drop_pct>best.risk_drop_pct)best=s;});
+  return best;
+}
+
+/* ---------- embedded agent (offline reasoning, mirrors backend router) ---------- */
+function renderAgent(){
+  const live=D.ai_status.llm_enabled;
+  document.getElementById('v-agent').innerHTML=`
+  <div class="section-h">ASK <b>VULNIQ</b></div>
+  <div class="section-sub">A Security Intelligence Copilot grounded ONLY on VulnIQ data — findings, chains, assets, applications, ownership, business units, sources (Snyk/Tenable/manual), objectives, leverage, history & trends. It never invents; if there's no evidence it says so.</div>
+  <div class="agent-banner ${live?'live':'offline'}">
+    <span class="ai-dot ${live?'on':'off'}"></span>
+    <span><b>${live?'Live copilot':'Offline mode'}</b> · ${live?'Powered by '+esc(D.ai_status.model)+' · grounded tool-calling agent (11 retrieval tools over the knowledge graph)':'Deterministic router over the same grounded context layer · set ANTHROPIC credentials for the full LLM copilot'}</span>
+  </div>
+  <div class="panel agent-panel">
+    <div class="chat-log" id="chatLog"></div>
+    <div class="suggestions" id="suggs"></div>
+    <div class="chat-input">
+      <input id="chatIn" placeholder="e.g. If I fix one thing this week, what breaks the most chains?" />
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>`;
+  const suggs=["What should KYC fix this week?","Which engineering team owns the highest risk?","Which chains combine Tenable and Snyk findings?","What's the shortest path to reduce risk by 50%?","What changed since the previous scan?","Which findings come from Tenable?"];
+  document.getElementById('suggs').innerHTML=suggs.map(s=>`<span class="sugg" onclick="askChat('${s.replace(/'/g,"\\'")}')">${s}</span>`).join('');
+  document.getElementById('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+  botSay(`Hi — I'm VulnIQ's copilot. I can see all ${S.total_findings} findings, ${S.total_chains} attack chains, and ${S.total_assets} assets. Ask me anything, or tap a suggestion below.`,[]);
+}
+function sendChat(){const v=document.getElementById('chatIn').value.trim();if(!v)return;document.getElementById('chatIn').value='';askChat(v);}
+/* Ask VulnIQ now calls the REAL backend copilot (/api/agent — grounded,
+   tool-calling, ownership-aware). Falls back to the local deterministic router
+   only when the backend is unreachable, so the demo still works offline. */
+async function askChat(msg){
+  userSay(msg);
+  if(HISTORICAL_MODE){ botSay('Read-only historical view — return to Live View to ask the live copilot.',[]); return; }
+  const thinking=showThinking();
+  if(BACKEND_URL){
+    try{
+      const r=await fetch(BACKEND_URL+'/api/agent',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:msg})});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      thinking.remove();
+      botSay(md(esc(d.answer||'').replace(/\n/g,'<br>')), d.tool_trace||d.trace||[]);
+      return;
+    }catch(e){ thinking.remove(); /* fall through to offline router */ }
+  }
+  const rr=agentReason(msg); botSay(rr.answer,rr.trace,rr.sim);
+}
+function showThinking(){
+  const l=document.getElementById('chatLog');
+  const el=document.createElement('div'); el.className='msg bot';
+  el.innerHTML=`<div class="who">VulnIQ Copilot</div><div class="bubble" style="color:var(--muted)">… analyzing the knowledge graph</div>`;
+  l.appendChild(el); l.scrollTop=l.scrollHeight; return el;
+}
+function userSay(t){const l=document.getElementById('chatLog');l.insertAdjacentHTML('beforeend',`<div class="msg user">${esc(t)}</div>`);l.scrollTop=l.scrollHeight;}
+function botSay(html,trace,sim){
+  const l=document.getElementById('chatLog');
+  const tr=trace&&trace.length?`<div class="tool-trace">${trace.map(t=>`<div class="tt">${t.tool}(${esc(JSON.stringify(t.input))})</div>`).join('')}</div>`:'';
+  const simHtml=sim?`<div class="sim-result"><div class="big">−${sim.risk_drop_pct}%</div><div style="font-size:12px;margin-top:5px">${sim.chains_collapsed} chains collapsed · risk ${sim.org_risk_before} → ${sim.org_risk_after}</div></div>`:'';
+  l.insertAdjacentHTML('beforeend',`<div class="msg bot"><div class="who">VulnIQ Agent</div><div class="bubble">${html}${simHtml}${tr}</div></div>`);
+  l.scrollTop=l.scrollHeight;
+}
+function md(s){return s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');}
+
+function agentReason(message){
+  const m=message.toLowerCase();const trace=[];
+  const T=(name,inp)=>trace.push({tool:name,input:inp});
+
+  if(/(one thing|single fix|fix first|biggest impact|most chains|where (do|should) i start|priorit)/.test(m)){
+    T('best_single_fix',{});const r=bestSingleFix();
+    return {answer:md(`Patch **${r.finding_id}** (${esc(r.title)}) first. It collapses **${r.chains_collapsed} of ${r.chains_before}** attack chains and drops org risk by **${r.risk_drop_pct}%** (from ${r.org_risk_before} to ${r.org_risk_after}). This finding sits at the centre of the most breach paths — a single patch with disproportionate impact.`),trace,sim:r};
+  }
+  if(/(dangerous|worst|top chain|attack path|breach path)/.test(m)){
+    T('get_top_chains',{n:3});
+    const lines=CH.slice(0,3).map(c=>`<br><br><strong>${c.chain_id}</strong> (risk ${c.chain_risk}) → ${esc(c.crown_jewel)}:<br>${esc(c.narrative)}`).join('');
+    return {answer:md(`Your most dangerous attack paths right now:`)+lines,trace};
+  }
+  const idMatch=message.match(/[Ff]-\d{5}/g);
+  if((m.includes('simulate')||m.includes('patch'))&&idMatch){
+    const ids=idMatch.map(x=>x.toUpperCase());T('simulate_patch',{finding_ids:ids});
+    const r=simulatePatch(ids);
+    return {answer:md(`Patching ${ids.join(', ')} collapses **${r.chains_collapsed}** chains and drops org risk by **${r.risk_drop_pct}%** (${r.org_risk_before} → ${r.org_risk_after}).`),trace,sim:r};
+  }
+  // asset — pick the asset whose id/name best matches the message (longest token overlap wins)
+  let bestAsset=null,bestScore=0;
+  const mtokens=m.split(/[\s,.?!]+/).filter(t=>t.length>2);
+  for(const aid in ASSETS){
+    const a=ASSETS[aid];
+    const haystack=(aid+' '+(a.name||'')).toLowerCase();
+    let sc=0;
+    mtokens.forEach(t=>{ if(haystack.includes(t)) sc+=t.length; });
+    if(sc>bestScore){bestScore=sc;bestAsset=aid;}
+  }
+  if(bestAsset && bestScore>=5){
+    const aid=bestAsset, a=ASSETS[aid];
+    T('get_asset_risk',{asset_id:aid});
+    const fs=F.filter(f=>f.affected_asset_id===aid);const onc=fs.filter(f=>f.chain_count>0);
+    let ans=`**${esc(a.name)}** — ${onc.length} of ${fs.length} findings sit on active attack chains.`;
+    if(a.is_crown_jewel)ans+=` ⚠️ This is a **CROWN JEWEL** (${esc(a.data_classification)}).`;
+    if(onc.length)ans+='<br>Top: '+onc.sort((x,y)=>y.final_score-x.final_score).slice(0,4).map(x=>`${x.finding_id} (${TIER_LABEL[x.priority]})`).join(', ');
+    return {answer:md(ans),trace};
+  }
+  if(/(internet|exposed|facing)/.test(m)){
+    T('query_findings',{internet_only:true});
+    const r=F.filter(f=>f.network_exposure==='internet'&&f.chain_count>0).sort((a,b)=>b.final_score-a.final_score).slice(0,6);
+    return {answer:md('Internet-facing findings on active chains:<br>'+r.map(f=>`• ${f.finding_id} (${TIER_LABEL[f.priority]}) ${esc(f.title)} [CVSS ${f.cvss}, EPSS ${(f.epss*100).toFixed(0)}%]`).join('<br>')),trace};
+  }
+  if(/(stat|how many|summary|overview|posture|layer)/.test(m)){
+    T('get_stats',{dimension:'all'});
+    return {answer:md(`**Posture:** ${S.total_findings} findings across ${S.total_assets} assets (${S.crown_jewels} crown jewels), from ${Object.keys(S.by_tool).length} tools spanning ${Object.keys(S.by_layer).length} OSI layers. **${S.total_chains}** cross-layer attack chains found. Org risk score **${BR.headline.org_risk_score}**.<br>Priorities → 🔴 ${S.by_priority.break_chain_critical||0} critical · 🟠 ${S.by_priority.patch_this_week||0} this week · 🟡 ${S.by_priority.patch_this_month||0} this month · ⚪ ${S.by_priority.defer||0} deferred as noise.`),trace};
+  }
+  if(/brief|report|board|exec/.test(m)){
+    T('generate_brief',{scope:'all'});
+    return {answer:md(`Generated. Head to the **Exec Brief** tab for the full board-ready one-pager with SEBI CSCRF / ISO 27001 / RBI control mapping. Headline: org risk **${BR.headline.org_risk_score}**, **${S.total_chains}** active chains, recommended first action **${BR.recommended_first_action.finding_id}** (−${BR.recommended_first_action.risk_drop_pct}% risk).`),trace};
+  }
+  return {answer:md("I can answer things like:<br>• *What's our most dangerous attack path?*<br>• *If I fix one thing, what breaks the most chains?*<br>• *Simulate patching F-00003*<br>• *How exposed is the trading ledger?*<br>• *Give me a posture overview*"),trace:[]};
+}
+
+/* ---------- Engineering Ownership ---------- */
+let OWN_VIEW='head';
+function renderOwnership(){
+  const el=document.getElementById('v-ownership'); if(!el) return;
+  el.innerHTML=`
+  <div class="section-h">ENGINEERING <b>OWNERSHIP</b></div>
+  <div class="section-sub">Every finding maps to exactly one engineering head; every chain to one primary owner (the team owning the end-state crown-jewel risk), with contributing teams as secondary. Totals reconcile exactly with global — no finding or chain is double-counted.</div>
+  <div class="filters" id="own-filters">
+    <div class="filt active" data-f="head">By Engineering Head</div>
+    <div class="filt" data-f="bu">By Business Unit</div>
+  </div>
+  <div id="own-recon" style="font-size:11px;color:var(--muted2);margin:2px 0 12px"></div>
+  <div id="own-body" style="color:var(--muted)">Loading ownership…</div>
+  <div id="own-detail" style="margin-top:16px"></div>`;
+  document.querySelectorAll('#own-filters .filt').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#own-filters .filt').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); OWN_VIEW=b.dataset.f; paintOwnership();
+  });
+  paintOwnership();
+}
+async function paintOwnership(){
+  const body=document.getElementById('own-body'); if(!body) return;
+  if(!BACKEND_URL){ body.innerHTML='<div class="panel" style="color:var(--muted)">Ownership requires the live backend.</div>'; return; }
+  let d; try{ d=await fetch(BACKEND_URL+'/api/ownership').then(r=>r.json()); }
+  catch(e){ body.textContent='Ownership unavailable (backend not reachable).'; return; }
+  const rec=document.getElementById('own-recon');
+  if(rec) rec.innerHTML = d.reconciles
+    ? `✓ reconciled — Σ findings per head = ${d.totals.findings} · Σ chains per primary owner = ${d.totals.chains} · P1 ${d.totals.p1} · org risk ${fmtScore(d.totals.risk)}`
+    : `⚠ reconciliation mismatch`;
+  if(OWN_VIEW==='bu'){
+    const rows=d.business_units||[];
+    body.innerHTML=`<div class="finding-row" style="font-weight:700;color:var(--muted2);font-size:11px"><div>BUSINESS UNIT</div><div></div><div class="fr-right">RISK · CHAINS · FINDINGS</div></div>`+
+      rows.map(b=>`<div class="finding-row" style="cursor:pointer" onclick="ownDetail('${esc(b.business_unit).replace(/'/g,"")}')">
+        <div><div class="fr-id">${esc(b.business_unit)}</div></div>
+        <div><div class="fr-meta"><span class="chip">${b.findings} findings</span><span class="chip" style="color:var(--week)">${b.chains} chains</span></div></div>
+        <div class="fr-right"><div class="fr-score" style="color:var(--crit)">${fmtScore(b.risk)}</div><div class="fr-chains">risk</div></div></div>`).join('');
+    return;
+  }
+  const rows=d.heads||[];
+  body.innerHTML=`<div class="finding-row" style="font-weight:700;color:var(--muted2);font-size:11px"><div>ENGINEERING HEAD</div><div>P1 · P2 · CROWN-JEWEL EXPOSURE</div><div class="fr-right">RISK · CHAINS</div></div>`+
+    rows.map(h=>`<div class="finding-row ${h.p1>0?'is-crit':''}" style="cursor:pointer" onclick="ownDetail('${esc(h.owner).replace(/'/g,"")}')">
+      <div><div class="fr-id">${esc(h.owner)}</div><div style="font-size:10px;color:var(--muted2);margin-top:4px">${esc(h.business_unit||'')}</div></div>
+      <div><div class="fr-meta">
+        <span class="chip" style="color:var(--crit)">P1 ${h.p1}</span>
+        <span class="chip" style="color:var(--week)">P2 ${h.p2}</span>
+        ${h.crown_exposure>0?`<span class="chip kev">👑 ${h.crown_exposure} crown paths</span>`:''}
+        <span class="chip">${h.findings} findings</span>
+      </div></div>
+      <div class="fr-right"><div class="fr-score" style="color:${h.risk>0?'var(--crit)':'var(--muted2)'}">${fmtScore(h.risk)}</div><div class="fr-chains">${h.chains} chains</div></div></div>`).join('');
+}
+async function ownDetail(scope){
+  const box=document.getElementById('own-detail'); if(!box) return;
+  box.innerHTML=`<div class="panel" style="color:var(--muted)">Loading ${esc(scope)}…</div>`;
+  let d; try{ d=await fetch(BACKEND_URL+'/api/ownership?scope='+encodeURIComponent(scope)).then(r=>r.json()); }
+  catch(e){ box.innerHTML='detail unavailable'; return; }
+  if(!d.found){ box.innerHTML=`<div class="panel" style="color:var(--muted)">${esc(d.note||'No data')}</div>`; return; }
+  const fx=(d.highest_leverage_fixes||[]).slice(0,6).map(f=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)">• <b class="mono">${esc(f.id)}</b> ${esc(f.title).slice(0,60)} <span class="chip">${esc(f.leverage_label)} leverage</span> <span style="color:var(--muted2)">${esc(f.application)}</span></div>`).join('')||'<span style="color:var(--muted2)">none</span>';
+  const ch=(d.chains||[]).slice(0,6).map(c=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)">• <b style="color:var(--crit)">${esc(c.id)}</b> risk ${c.risk} → ${esc(c.crown_jewel)} <span class="chip">conf ${c.confidence}</span> ${(c.secondary_owners||[]).length?`<span class="chip" style="color:var(--month)">+${c.secondary_owners.length} contributing teams</span>`:''}</div>`).join('')||'<span style="color:var(--muted2)">none</span>';
+  box.innerHTML=`<div class="panel">
+    <div class="panel-h"><h3>${esc(d.scope)}</h3><span class="hint">${d.total_findings} findings · ${d.p1} P1 · ${d.findings_on_chains} on chains</span></div>
+    <div style="margin-top:6px"><div class="brief-sec-h">Highest-leverage fixes</div>${fx}</div>
+    <div style="margin-top:12px"><div class="brief-sec-h">Top attack paths owned</div>${ch}</div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted2)">Business units: ${(d.business_units||[]).map(esc).join(', ')||'—'}</div>
+  </div>`;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ---------- upload findings ---------- */
+const BACKEND_URL = (window.VULNIQ_BACKEND || ''); // set to e.g. http://localhost:8000 for live mode
+function renderUpload(){
+  document.getElementById('v-upload').innerHTML=`
+  <div class="section-h">UPLOAD <b>FINDINGS</b></div>
+  <div class="section-sub">Drop scan exports from any team, any tool, any format. The Extraction Agent (Role 1) deep-reads each file, normalizes it into the unified schema, infers attacker capabilities, and merges it into the live attack graph — so new findings start chaining immediately.</div>
+
+  <div class="up-grid">
+    <div>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon pixel">[ ^ ]</div>
+        <div class="dz-title">Drag & drop scan files here</div>
+        <div class="dz-sub">or <span class="dz-browse" id="browseBtn">browse</span> — supports JSON · XML · CSV · XLSX · PDF</div>
+        <input type="file" id="fileInput" multiple accept=".json,.xml,.csv,.xlsx,.xls,.pdf" style="display:none" />
+      </div>
+      <div class="up-mode" id="upMode"></div>
+      <div class="up-formats">
+        <div class="fmt-card"><span class="fmt-x">{ }</span><div><b>JSON / XML</b><span>Native tool exports — Semgrep, Burp, Nessus, Trivy</span></div></div>
+        <div class="fmt-card"><span class="fmt-x">▦</span><div><b>CSV / XLSX</b><span>Exported finding sheets, IAM scans, manual logs</span></div></div>
+        <div class="fmt-card"><span class="fmt-x">▤</span><div><b>PDF</b><span>Scanner reports, pentest reports, prose findings</span></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel" style="min-height:380px">
+        <div class="panel-h"><h3>Ingestion pipeline</h3><span class="hint" id="pipeHint">waiting for files…</span></div>
+        <div id="pipeSteps"></div>
+        <div id="uploadResults"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="snykPanel" style="margin-top:18px">
+    <div class="panel-h">
+      <h3>⚡ Native Snyk Sync</h3>
+      <button id="snykSyncBtn" style="cursor:pointer;border:1px solid var(--blue);background:rgba(124,131,253,.12);color:var(--blue);font-family:inherit;font-weight:700;font-size:12px;padding:6px 16px;border-radius:7px">⟳ Sync Snyk</button>
+    </div>
+    <div class="section-sub" style="margin:4px 0 12px">Pulls Snyk Code · Open Source · IaC · Container · Secrets from the last 30 days into the same unified attack graph as manual uploads. Not fetched at startup.</div>
+    <div id="snykStatus" style="font-size:12.5px;color:var(--muted)">Loading sync status…</div>
+    <div id="snykBySource" style="margin-top:14px"></div>
+  </div>
+
+  <div class="panel" id="tenablePanel" style="margin-top:18px">
+    <div class="panel-h">
+      <h3>🛰 Native Tenable Sync</h3>
+      <button id="tenableSyncBtn" style="cursor:pointer;border:1px solid var(--green);background:rgba(31,209,122,.12);color:var(--green);font-family:inherit;font-weight:700;font-size:12px;padding:6px 16px;border-radius:7px">⟳ Sync Tenable</button>
+    </div>
+    <div class="section-sub" style="margin:4px 0 12px">Pulls Tenable Security Center host findings (Critical · High) into the SAME unified attack graph. Each host IP is correlated to its application via the asset inventory, so host CVEs chain with Snyk &amp; manual findings on the same app. Not fetched at startup.</div>
+    <div id="tenableStatus" style="font-size:12.5px;color:var(--muted)">Loading sync status…</div>
+  </div>`;
+
+  const dz=document.getElementById('dropzone'), fi=document.getElementById('fileInput');
+  document.getElementById('browseBtn').onclick=()=>fi.click();
+  dz.onclick=(e)=>{if(e.target.id!=='browseBtn')fi.click();};
+  dz.ondragover=e=>{e.preventDefault();dz.classList.add('drag');};
+  dz.ondragleave=()=>dz.classList.remove('drag');
+  dz.ondrop=e=>{e.preventDefault();dz.classList.remove('drag');handleFiles(e.dataTransfer.files);};
+  fi.onchange=()=>handleFiles(fi.files);
+
+  // detect backend
+  const modeEl=document.getElementById('upMode');
+  if(BACKEND_URL){
+    fetch(BACKEND_URL+'/api/health').then(r=>r.json()).then(h=>{
+      modeEl.innerHTML=`<span class="ai-dot on"></span> <b>Live backend connected</b> · ${esc(h.model)} · ${h.llm?'LLM extraction ON':'offline extraction'} — files will be really parsed & chained.`;
+      modeEl.className='up-mode live';
+    }).catch(()=>{
+      modeEl.innerHTML=`<span class="ai-dot off"></span> <b>Demo mode</b> · backend not reachable. Uploads are simulated to show the flow. Run the backend + set <span class="mono">window.VULNIQ_BACKEND</span> for live extraction.`;
+      modeEl.className='up-mode offline';
+    });
+  } else {
+    modeEl.innerHTML=`<span class="ai-dot off"></span> <b>Demo mode</b> · this standalone dashboard simulates extraction to show the flow. With the backend running, the same UI POSTs to <span class="mono">/api/upload</span> for real LLM extraction & live chaining.`;
+    modeEl.className='up-mode offline';
+  }
+  // Native Snyk sync panel
+  const sBtn=document.getElementById('snykSyncBtn');
+  if(sBtn) sBtn.onclick=triggerSnykSync;
+  refreshSnykStatus();
+  // Native Tenable sync panel
+  const tBtn=document.getElementById('tenableSyncBtn');
+  if(tBtn) tBtn.onclick=triggerTenableSync;
+  refreshTenableStatus();
+}
+
+function refreshTenableStatus(){
+  if(!BACKEND_URL) return;
+  fetch(BACKEND_URL+'/api/sync/tenable/status').then(r=>r.json()).then(renderTenableStatus).catch(()=>{
+    const e=document.getElementById('tenableStatus'); if(e)e.textContent='Sync status unavailable (backend not reachable).';
+  });
+}
+function renderTenableStatus(s){
+  const el=document.getElementById('tenableStatus'); if(!el)return;
+  const btn=document.getElementById('tenableSyncBtn');
+  if(!s.configured){ el.innerHTML=`<span style="color:var(--week)">⚠ Tenable not configured</span> — set <span class="mono">TENABLE_BASE_URL</span>, <span class="mono">TENABLE_ACCESS_KEY</span> and <span class="mono">TENABLE_SECRET_KEY</span> in <span class="mono">backend/.env</span>.`; if(btn)btn.disabled=true; return; }
+  const stCol={ok:'var(--ok)',running:'var(--blue)',error:'var(--crit)',never:'var(--muted2)'}[s.sync_status]||'var(--muted2)';
+  const when=s.last_sync_time?new Date(s.last_sync_time).toLocaleString():'never';
+  if(btn){ btn.disabled=(s.sync_status==='running'); btn.textContent=s.sync_status==='running'?'⟳ Syncing…':'⟳ Sync Tenable'; }
+  el.innerHTML=`
+    <span style="color:${stCol};font-weight:700;text-transform:uppercase">${esc(s.sync_status)}</span>
+    · last sync: <b>${esc(when)}</b>
+    ${s.sync_duration_sec?` · ${s.sync_duration_sec}s`:''}
+    · severity ${esc(s.severity||'critical,high')} · cap ${s.max_findings}
+    <div style="margin-top:6px">+${s.findings_added} added · ~${s.findings_updated} updated · −${s.findings_removed} removed</div>
+    ${(s.errors&&s.errors.length)?`<div style="color:var(--crit);margin-top:6px">⚠ ${esc(s.errors.join('; '))}</div>`:''}`;
+  if(s.sync_status==='running') setTimeout(refreshTenableStatus,2500);
+}
+async function triggerTenableSync(){
+  if(HISTORICAL_MODE){ alert('Read-only historical view — return to Live View to sync.'); return; }
+  const btn=document.getElementById('tenableSyncBtn'); if(btn){btn.disabled=true;btn.textContent='⟳ Starting…';}
+  try{
+    const r=await fetch(BACKEND_URL+'/api/sync/tenable',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!d.triggered){ const e=document.getElementById('tenableStatus'); if(e)e.innerHTML=`<span style="color:var(--week)">${esc(d.message)}</span>`; }
+    setTimeout(refreshTenableStatus,1500);
+    const poll=setInterval(async()=>{
+      const s=await fetch(BACKEND_URL+'/api/sync/tenable/status').then(x=>x.json());
+      if(s.sync_status!=='running'){ clearInterval(poll); await loadLiveData('tenable-sync'); refreshTenableStatus(); }
+    },3000);
+  }catch(e){ const el=document.getElementById('tenableStatus'); if(el)el.textContent='Sync failed to start: '+e.message; if(btn){btn.disabled=false;btn.textContent='⟳ Sync Tenable';} }
+}
+
+const SNYK_PRODUCTS=['Snyk Code','Snyk Open Source','Snyk IaC','Snyk Container','Snyk Secrets'];
+function refreshSnykStatus(){
+  if(!BACKEND_URL) return;
+  fetch(BACKEND_URL+'/api/sync/snyk/status').then(r=>r.json()).then(renderSnykStatus).catch(()=>{
+    const e=document.getElementById('snykStatus'); if(e)e.textContent='Sync status unavailable (backend not reachable).';
+  });
+}
+function renderSnykStatus(s){
+  const el=document.getElementById('snykStatus'); if(!el)return;
+  const btn=document.getElementById('snykSyncBtn');
+  if(!s.configured){ el.innerHTML=`<span style="color:var(--week)">⚠ Snyk not configured</span> — set <span class="mono">SNYK_API_TOKEN</span> and <span class="mono">SNYK_ORG_ID</span> in <span class="mono">backend/.env</span>.`; if(btn)btn.disabled=true; return; }
+  const stCol={ok:'var(--ok)',running:'var(--blue)',error:'var(--crit)',never:'var(--muted2)'}[s.sync_status]||'var(--muted2)';
+  const when=s.last_sync_time?new Date(s.last_sync_time).toLocaleString():'never';
+  if(btn){ btn.disabled=(s.sync_status==='running'); btn.textContent=s.sync_status==='running'?'⟳ Syncing…':'⟳ Sync Snyk'; }
+  el.innerHTML=`
+    <span style="color:${stCol};font-weight:700;text-transform:uppercase">${esc(s.sync_status)}</span>
+    · last sync: <b>${esc(when)}</b>
+    ${s.sync_duration_sec?` · ${s.sync_duration_sec}s`:''}
+    · lookback ${s.lookback_days}d
+    <div style="margin-top:6px">+${s.findings_added} added · ~${s.findings_updated} updated · −${s.findings_removed} removed</div>
+    ${(s.errors&&s.errors.length)?`<div style="color:var(--crit);margin-top:6px">⚠ ${esc(s.errors.join('; '))}</div>`:''}`;
+  if(s.sync_status==='running') setTimeout(refreshSnykStatus,2500);
+  // findings-by-source breakdown (from the live snapshot stats)
+  const bsEl=document.getElementById('snykBySource');
+  if(bsEl){
+    const bySrc=(S&&S.by_source)||{};
+    const rows=Object.entries(bySrc).sort((a,b)=>b[1]-a[1]);
+    bsEl.innerHTML=rows.length?`<div class="brief-sec-h" style="margin-bottom:8px">Findings by source</div>`+
+      rows.map(([k,v])=>{const isSnyk=k.startsWith('Snyk');return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${isSnyk?'⚡ ':'📄 '}${esc(k)}</span><b>${v}</b></div>`}).join(''):'';
+  }
+}
+async function triggerSnykSync(){
+  if(HISTORICAL_MODE){ alert('Read-only historical view — return to Live View to sync.'); return; }
+  const btn=document.getElementById('snykSyncBtn'); if(btn){btn.disabled=true;btn.textContent='⟳ Starting…';}
+  try{
+    const r=await fetch(BACKEND_URL+'/api/sync/snyk',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!d.triggered){ const e=document.getElementById('snykStatus'); if(e)e.innerHTML=`<span style="color:var(--week)">${esc(d.message)}</span>`; }
+    setTimeout(refreshSnykStatus,1500);
+    // when the sync finishes, pull the rebuilt graph so all views reflect Snyk findings
+    const poll=setInterval(async()=>{
+      const s=await fetch(BACKEND_URL+'/api/sync/snyk/status').then(x=>x.json());
+      if(s.sync_status!=='running'){ clearInterval(poll); await loadLiveData('snyk-sync'); refreshSnykStatus(); }
+    },3000);
+  }catch(e){ const el=document.getElementById('snykStatus'); if(el)el.textContent='Sync failed to start: '+e.message; if(btn){btn.disabled=false;btn.textContent='⟳ Sync Snyk';} }
+}
+
+function handleFiles(files){
+  if(HISTORICAL_MODE){ alert('Read-only historical view — return to Live View to upload.'); return; }
+  if(!files||!files.length)return;
+  document.getElementById('pipeHint').textContent=`${files.length} file(s) queued`;
+  document.getElementById('uploadResults').innerHTML='';
+  [...files].forEach((f,i)=>setTimeout(()=>processFile(f),i*200));
+}
+
+async function processFile(file){
+  const fmt=(file.name.split('.').pop()||'').toLowerCase();
+  const steps=document.getElementById('pipeSteps');
+  const id='pipe-'+Math.random().toString(36).slice(2,8);
+  steps.insertAdjacentHTML('beforeend',`
+    <div class="pipe-file" id="${id}">
+      <div class="pf-head"><span class="pf-name">${esc(file.name)}</span><span class="pf-fmt">${esc(fmt.toUpperCase())}</span></div>
+      <div class="pf-steps">
+        <div class="pf-step" data-s="extract">① Format extraction</div>
+        <div class="pf-step" data-s="normalize">② AI normalization (Role 1)</div>
+        <div class="pf-step" data-s="merge">③ Merge + recompute chains</div>
+      </div>
+      <div class="pf-out"></div>
+    </div>`);
+  const card=document.getElementById(id);
+  const setStep=(s,cls)=>{const el=card.querySelector(`[data-s="${s}"]`);if(el)el.className='pf-step '+cls;};
+
+  if(BACKEND_URL){
+    // LIVE
+    try{
+      setStep('extract','run');
+      const fd=new FormData();fd.append('file',file);
+      const resp=await fetch(BACKEND_URL+'/api/upload',{method:'POST',body:fd});
+      const d=await resp.json();
+      setStep('extract','done');setStep('normalize','done');setStep('merge','done');
+      renderUploadResult(card,d);
+      // Merge is live on the backend now — pull the recomputed engine state so
+      // Overview / Priorities / Chains / Graph / Brief reflect this file (and
+      // every earlier file this session). Done after rendering the result card.
+      if(d.ok){ loadLiveData('upload:'+(file.name||'')); }
+    }catch(e){
+      setStep('extract','err');
+      card.querySelector('.pf-out').innerHTML=`<div class="pf-err">Upload failed: ${esc(e.message)}</div>`;
+    }
+  } else {
+    // DEMO simulation
+    await wait(500);setStep('extract','done');
+    await wait(800);setStep('normalize','run');
+    await wait(900);setStep('normalize','done');
+    setStep('merge','run');
+    await wait(700);setStep('merge','done');
+    renderUploadResult(card,simulateUpload(file.name,fmt));
+  }
+}
+function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+
+function renderUploadResult(card,d){
+  if(!d.ok){card.querySelector('.pf-out').innerHTML=`<div class="pf-err">${esc(d.error||'extraction failed')}</div>`;return;}
+  const rev=d.review_queue||[];
+  card.querySelector('.pf-out').innerHTML=`
+    <div class="pf-summary">
+      <span class="pf-stat"><b>${d.extracted}</b> extracted</span>
+      <span class="pf-stat ok"><b>${d.auto_accepted!=null?d.auto_accepted:(d.extracted-d.needs_review)}</b> auto-accepted</span>
+      <span class="pf-stat warn"><b>${d.needs_review}</b> need review</span>
+      <span class="pf-stat ai"><b>${esc(d.extraction_method)}</b></span>
+    </div>
+    <div class="pf-merge">⚡ Merged into live graph — attack chains <b>${d.merge.chains_before}</b> → <b style="color:var(--crit)">${d.merge.chains_after}</b>${d.merge.uploaded_findings_on_chains&&d.merge.uploaded_findings_on_chains.length?` · ${d.merge.uploaded_findings_on_chains.length} uploaded finding(s) landed on a chain`:''}</div>
+    ${rev.length?`<div class="pf-review"><div class="pf-review-h">⚠ Flagged for human review</div>${rev.slice(0,5).map(r=>`<div class="pf-rev-row"><span>${esc(r.finding_id)} · ${esc(r.title.slice(0,46))}</span><span class="pf-conf">conf ${r.confidence}</span><div class="pf-rev-reason">${esc(r.reason)}</div></div>`).join('')}</div>`:''}`;
+}
+
+// Demo simulation that mirrors what the real backend returns
+function simulateUpload(name,fmt){
+  const samples={
+    json:{extracted:2,needs_review:0,method:'llm',chains:[11,19],on:['F-U1000','F-U1001'],
+      rev:[]},
+    csv:{extracted:3,needs_review:1,method:'llm',chains:[19,28],on:['F-U1003','F-U1004'],
+      rev:[{finding_id:'F-U1005',title:'Weird login behavior',confidence:0.45,reason:'no severity given; auth_bypass inferred from prose — verify'}]},
+    xlsx:{extracted:2,needs_review:0,method:'llm',chains:[28,28],on:[],rev:[]},
+    pdf:{extracted:5,needs_review:2,method:'llm',chains:[28,33],on:['F-U1010','F-U1012'],
+      rev:[{finding_id:'F-U1011',title:'Possible info disclosure in error page',confidence:0.52,reason:'severity ambiguous in prose; CVSS estimated'},
+           {finding_id:'F-U1014',title:'Legacy TLS configuration',confidence:0.58,reason:'asset not clearly named in report — needs mapping'}]},
+    xml:{extracted:4,needs_review:1,method:'llm',chains:[33,38],on:['F-U1020'],
+      rev:[{finding_id:'F-U1021',title:'Directory listing enabled',confidence:0.55,reason:'asset guessed from hostname pattern'}]},
+  };
+  const s=samples[fmt]||samples.json;
+  return {ok:true,format:fmt,extracted:s.extracted,needs_review:s.rev.length,
+    auto_accepted:s.extracted-s.rev.length,extraction_method:s.method+' (simulated)',
+    review_queue:s.rev,merge:{chains_before:s.chains[0],chains_after:s.chains[1],uploaded_findings_on_chains:s.on}};
+}
+
+/* ---------- AI engine view ---------- */
+function renderAI(){
+  const A=D.ai_status;
+  const live=A.llm_enabled;
+  const roleIcons={edge_inference:'🔗',chain_narrator:'📖',dashboard_copilot:'💬'};
+  const roleDetail={
+    edge_inference:{
+      what:'Semantic ENABLES edges (Pass 2 of graph construction)',
+      flow:'For every (A,B) candidate pair the deterministic pass flagged as plausibly connectable → Claude reads finding A, finding B, and the asset context → returns enables:true/false, confidence:0–1, and a one-sentence rationale. Batched 12 pairs/call. Cached by pair-hash.',
+      input:'~few hundred pre-filtered candidate finding pairs',
+      output:'High-confidence ENABLES edges with audit-logged rationale',
+    },
+    chain_narrator:{
+      what:'Per-chain breach-story generation',
+      flow:'For each ranked attack chain → structured prompt with finding sequence + asset path + crown jewel → Claude returns a 2-3 sentence attacker-perspective narrative. The text shown under every chain in this dashboard.',
+      input:'Chain structure (findings, assets, capabilities, target)',
+      output:'Natural-language attack narrative for humans',
+    },
+    dashboard_copilot:{
+      what:'True ReAct-style tool-calling agent',
+      flow:'User asks a question → Claude decides which of 6 tools to call → executes tool(s) → can chain multiple tool calls (bounded ≤6) → synthesizes final answer grounded in tool results. The "Ask VulnIQ" tab.',
+      input:'Free-form natural language question',
+      output:'Answer + tool-trace (visible in the UI for transparency)',
+      tools:['get_top_chains','query_findings','get_stats','get_asset_risk','best_single_fix','simulate_patch (action)'],
+    },
+  };
+
+  document.getElementById('v-ai').innerHTML=`
+  <div class="section-h">AI <b>ENGINE</b></div>
+  <div class="section-sub">VulnIQ uses <b style="color:var(--yellow)">one model in three distinct agentic roles</b>. Single strong model over multi-model, because the latter adds integration cost / latency / failure surface for no measurable quality gain on these tasks.</div>
+
+  <div class="ai-hero">
+    <div class="ai-hero-l">
+      <div class="ai-hero-label">MODEL</div>
+      <div class="ai-hero-model">${esc(A.model)}</div>
+      <div class="ai-hero-sub">Anthropic · Frontier reasoning + tool-use</div>
+    </div>
+    <div class="ai-hero-r">
+      <div class="ai-status-pill ${live?'live':'offline'}">
+        <span class="ai-dot ${live?'on':'off'}"></span>
+        ${live?'LIVE — calling Claude':'OFFLINE — deterministic fallbacks'}
+      </div>
+      <div class="ai-status-note">${live
+        ?'Every semantic edge is LLM-judged, every chain narrative is LLM-written, every dashboard question hits a real tool-calling agent.'
+        :'Set <span class="mono">ANTHROPIC_API_KEY</span> and restart the backend to switch to live LLM mode. All three roles will activate automatically.'}</div>
+    </div>
+  </div>
+
+  <div class="role-grid">
+    ${A.roles.map(r=>{
+      const det=roleDetail[r.name]||{};
+      return `<div class="role-card">
+        <div class="role-head">
+          <span class="role-icon">${roleIcons[r.name]||'🤖'}</span>
+          <div>
+            <div class="role-name">${esc(r.name.replace(/_/g,' ').toUpperCase())}</div>
+            <div class="role-pattern">${esc(r.agentic_pattern)}</div>
+          </div>
+          <span class="role-status ${live?'live':'off'}">${live?'LIVE':'fallback'}</span>
+        </div>
+        <div class="role-what"><b>What it does:</b> ${esc(det.what||r.purpose)}</div>
+        <div class="role-flow"><b>How it works:</b> ${esc(det.flow||'')}</div>
+        <div class="role-io">
+          <div><span class="io-l">INPUT</span>${esc(det.input||'—')}</div>
+          <div><span class="io-l">OUTPUT</span>${esc(det.output||'—')}</div>
+        </div>
+        ${det.tools?`<div class="role-tools"><span class="io-l">TOOLS</span>${det.tools.map(t=>`<span class="tool-chip">${esc(t)}</span>`).join('')}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="ai-flow">
+    <div class="ai-flow-title">END-TO-END PIPELINE</div>
+    <div class="ai-flow-row">
+      <div class="ai-step det">
+        <div class="ai-step-n">1</div>
+        <div class="ai-step-t">DETERMINISTIC PASS</div>
+        <div class="ai-step-d">CWE → capability mapping. Asset reachability graph. CORRELATES clustering by CVE/component. Pre-filters N² candidate pairs down to a few hundred.</div>
+        <div class="ai-step-tag">no LLM · transparent · auditable</div>
+      </div>
+      <div class="ai-arrow">→</div>
+      <div class="ai-step llm">
+        <div class="ai-step-n">2</div>
+        <div class="ai-step-t">EDGE INFERENCE AGENT</div>
+        <div class="ai-step-d">Claude judges each candidate pair: "Does A's granted capability plausibly enable B?" Returns confidence + rationale. Builds the ENABLES layer of the attack graph.</div>
+        <div class="ai-step-tag">🧠 Claude · batched · cached</div>
+      </div>
+      <div class="ai-arrow">→</div>
+      <div class="ai-step det">
+        <div class="ai-step-n">3</div>
+        <div class="ai-step-t">CHAIN MATH</div>
+        <div class="ai-step-d">NetworkX path enumeration. ChainRisk = exposure × exploit × feasibility × jewel × control-gap. Betweenness centrality → finding tiers.</div>
+        <div class="ai-step-tag">no LLM · graph algorithms</div>
+      </div>
+      <div class="ai-arrow">→</div>
+      <div class="ai-step llm">
+        <div class="ai-step-n">4</div>
+        <div class="ai-step-t">CHAIN NARRATOR AGENT</div>
+        <div class="ai-step-d">For each ranked chain, Claude writes the attacker-perspective story shown under each chain card in this dashboard.</div>
+        <div class="ai-step-tag">🧠 Claude · structured → prose</div>
+      </div>
+      <div class="ai-arrow">→</div>
+      <div class="ai-step llm">
+        <div class="ai-step-n">5</div>
+        <div class="ai-step-t">DASHBOARD COPILOT</div>
+        <div class="ai-step-d">User-facing agent. Tool-calling loop. Answers questions, runs counterfactuals (simulate_patch), produces briefs.</div>
+        <div class="ai-step-tag">🧠 Claude · 6 tools · ReAct loop</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-why">
+    <div class="ai-why-title">WHY THIS DESIGN</div>
+    <div class="ai-why-grid">
+      <div class="ai-why-card">
+        <div class="why-h">One model, three roles</div>
+        <div class="why-b">Claude is strong enough alone for all three jobs. Multi-model would add 3× integration cost, latency, and failure surface for no measurable quality gain.</div>
+      </div>
+      <div class="ai-why-card">
+        <div class="why-h">Graph for math, LLM for semantics</div>
+        <div class="why-b">The LLM never does graph traversal — that's NetworkX. The LLM only judges what humans uniquely judge well: "does this enable that?"</div>
+      </div>
+      <div class="ai-why-card">
+        <div class="why-h">Deterministic skeleton</div>
+        <div class="why-b">Every LLM verdict is bounded by a transparent CWE→capability table and CMDB-style asset data. No hallucinated chains, every edge auditable.</div>
+      </div>
+      <div class="ai-why-card">
+        <div class="why-h">Offline fallbacks everywhere</div>
+        <div class="why-b">Every role has a deterministic fallback so a demo never breaks. With API key present, full LLM mode activates automatically.</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- brief ---------- */
+function renderBrief(){
+  const h=BR.headline,a=BR.recommended_first_action;
+  document.getElementById('v-brief').innerHTML=`
+  <div class="brief-doc">
+    <div class="brief-head">
+      <h2>${esc(BR.title)}</h2>
+      <div class="st">${esc(BR.subtitle)}</div>
+      <div class="for">${esc(BR.generated_for)}</div>
+    </div>
+    <div class="brief-kpis">
+      <div class="bk"><div class="n red">${h.org_risk_score}</div><div class="l">Org risk score</div></div>
+      <div class="bk"><div class="n red">${h.active_attack_chains}</div><div class="l">Active attack chains</div></div>
+      <div class="bk"><div class="n">${h.crown_jewels_reachable}</div><div class="l">Crown jewels reachable</div></div>
+      <div class="bk"><div class="n gr">${h.noise_reduction_pct}%</div><div class="l">Findings cut as noise</div></div>
+    </div>
+    <div class="brief-sec-h">Recommended first action</div>
+    <div class="action-box">
+      <div class="big">−${a.risk_drop_pct}%</div>
+      <div class="txt">Patch <b>${a.finding_id}</b> — ${esc(a.title)}.<br>Collapses <b>${a.chains_collapsed}</b> attack chains in a single remediation. Highest leverage fix available this cycle.</div>
+    </div>
+    <div class="brief-sec-h">Top attack chains</div>
+    ${BR.top_attack_chains.map(c=>`<div class="bchain">
+      <div class="top"><span class="chain-id">${c.chain_id} → ${esc(c.crown_jewel)}</span><span class="rk">risk ${c.risk}</span></div>
+      <div class="nr">${esc(c.narrative)}</div>
+      <div class="ctrls">${(c.controls||[]).map(ct=>`<span class="ctrl-tag">${esc(ct)}</span>`).join('')}</div>
+    </div>`).join('')}
+    <div class="brief-sec-h">Break-chain critical findings</div>
+    ${BR.break_chain_critical_findings.map(f=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px">
+      <span><b style="font-family:Space Mono">${f.finding_id}</b> · ${esc(f.title)} <span style="color:var(--muted)">(${esc(f.asset)})</span></span>
+      <span style="color:var(--crit);font-family:Space Mono">${f.chains} chains</span></div>`).join('')}
+    <div class="compliance">${esc(BR.compliance_note)}</div>
+  </div>`;
+}
+
+/* ---- live data refresh ---- */
+/* Update the topbar numbers + AI pill in place from the current globals. */
+function updateTopbar(){
+  const set=(id,v)=>{const el=document.getElementById(id); if(el!=null&&v!=null) el.textContent=v;};
+  set('tb-chains', S.total_chains);
+  set('tb-risk', (BR.headline||{}).org_risk_score);
+  set('tb-findings', S.total_findings);
+  set('tb-noise', ((BR.headline||{}).noise_reduction_pct!=null?(BR.headline.noise_reduction_pct+'%'):null));
+  const ais=D.ai_status||{};
+  const dot=document.getElementById('aiDot'), mode=document.getElementById('aiMode');
+  if(dot) dot.className='ai-dot '+(ais.llm_enabled?'on':'off');
+  if(mode) mode.textContent=ais.llm_enabled?'LIVE':'OFFLINE';
+  const model=document.querySelector('.ai-model'); if(model&&ais.model) model.textContent=ais.model;
+  const roles=document.querySelector('.ai-roles'); if(roles&&ais.roles) roles.textContent=ais.roles.length+' agents';
+  const pill=document.getElementById('aiPill'); if(pill&&ais.note) pill.title=ais.note;
+}
+
+/* Re-render every data-driven page from the current globals, preserving the
+   tab the user is on. The Upload tab is intentionally left untouched so the
+   just-completed upload result stays visible. */
+function refreshViews(){
+  updateTopbar();
+  const active=(document.querySelector('.tab.active')||{}).dataset?.v || 'overview';
+  try{ renderOverview(); }catch(e){console.warn('overview',e);}
+  try{ renderPriorities(); }catch(e){console.warn('priorities',e);}
+  try{ renderChains(); }catch(e){console.warn('chains',e);}
+  try{ renderGraphView(); }catch(e){console.warn('graph',e);}
+  try{ renderAI(); }catch(e){console.warn('ai',e);}
+  try{ renderBrief(); }catch(e){console.warn('brief',e);}
+  try{ renderHistory(); }catch(e){console.warn('history',e);}
+  if(active==='graph') setTimeout(drawGraph,40);
+}
+
+/* ---------- History / trends / compare (PostgreSQL persistence) ---------- */
+let HIST_RUNS=[];
+function renderHistory(){
+  const el=document.getElementById('v-history'); if(!el) return;
+  if(!BACKEND_URL){ el.innerHTML='<div class="section-sub">History requires the live backend.</div>'; return; }
+  el.innerHTML=`<div class="section-h">SECURITY <b>HISTORY</b></div>
+    <div class="section-sub">Every Snyk sync and upload is persisted as an immutable run. Load a past run, compare two runs, or view trends for board reporting.</div>
+    <div id="histBody" style="color:var(--muted)">Loading run history…</div>`;
+  fetch(BACKEND_URL+'/api/history').then(r=>r.json()).then(d=>{
+    const body=document.getElementById('histBody'); if(!body) return;
+    if(!d.enabled){ body.innerHTML='<div class="panel" style="color:var(--muted)">⚙ Persistence is off — set <span class="mono">DATABASE_URL</span> (or run via <span class="mono">docker compose up</span>) to enable historical runs, trends and comparison.</div>'; return; }
+    HIST_RUNS=d.runs||[];
+    if(!HIST_RUNS.length){ body.innerHTML='<div class="panel" style="color:var(--muted)">No runs yet. Run a Snyk sync or upload a report to create the first historical snapshot.</div>'; return; }
+    const opts=HIST_RUNS.map(r=>`<option value="${r.run_id}">#${r.run_id} · ${new Date(r.created_at).toLocaleString()} · ${esc(r.source)}</option>`).join('');
+    body.innerHTML=`
+      <div class="up-grid">
+        <div class="panel">
+          <div class="panel-h"><h3>Runs</h3><span class="hint">${HIST_RUNS.length} snapshots</span></div>
+          <div style="max-height:520px;overflow:auto">${HIST_RUNS.map(histRow).join('')}</div>
+        </div>
+        <div>
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-h"><h3>Compare runs</h3></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+              <span>From</span><select id="cmpFrom" style="background:var(--panel);color:var(--fg);border:1px solid var(--line2);border-radius:6px;padding:5px">${opts}</select>
+              <span>To</span><select id="cmpTo" style="background:var(--panel);color:var(--fg);border:1px solid var(--line2);border-radius:6px;padding:5px">${opts}</select>
+              <button onclick="runCompare()" style="cursor:pointer;border:1px solid var(--blue);background:rgba(124,131,253,.12);color:var(--blue);font-family:inherit;font-weight:700;padding:5px 14px;border-radius:6px">Compare</button>
+            </div>
+            <div id="cmpResult" style="margin-top:12px"></div>
+          </div>
+          <div class="panel"><div class="panel-h"><h3>Trend</h3></div><div id="trendBox">loading…</div></div>
+        </div>
+      </div>`;
+    const sel1=document.getElementById('cmpFrom'), sel2=document.getElementById('cmpTo');
+    if(HIST_RUNS.length>=2){ sel1.value=HIST_RUNS[1].run_id; sel2.value=HIST_RUNS[0].run_id; }
+    renderTrend();
+  }).catch(e=>{const b=document.getElementById('histBody'); if(b)b.textContent='History unavailable: '+e.message;});
+}
+function histRow(r){
+  const dt=new Date(r.created_at).toLocaleString();
+  return `<div class="finding-row" style="cursor:pointer" onclick="loadHistoricalRun(${r.run_id})">
+    <div><div class="fr-id">#${r.run_id}</div><div style="font-size:10px;color:var(--muted2);margin-top:4px">${esc(r.run_type)}</div></div>
+    <div><div class="fr-title">${esc(r.source)}</div><div class="fr-meta"><span>${dt}</span><span class="chip">${r.findings_count} findings</span><span class="chip">${r.chains_count} chains</span><span class="chip" style="color:var(--crit)">P1 ${r.p1_count}</span></div></div>
+    <div class="fr-right"><div class="fr-score">${fmtScore(r.risk_score)}</div><div class="fr-chains">risk</div></div></div>`;
+}
+let HISTORICAL_MODE=false;
+async function loadHistoricalRun(id){
+  const snap=await fetch(BACKEND_URL+'/api/history/'+id).then(r=>r.json());
+  if(snap.error){ alert('Run not found'); return; }
+  applyData(snap); refreshViews();
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.tab[data-v="overview"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('v-overview').classList.add('active');
+  setHistoricalMode(true, snap.run||{run_id:id});
+  window.scrollTo(0,0);
+}
+function setHistoricalMode(on, run){
+  HISTORICAL_MODE=on;
+  let bar=document.getElementById('histBar');
+  if(on){
+    if(!bar){ bar=document.createElement('div'); bar.id='histBar';
+      bar.style.cssText='position:sticky;top:0;left:0;right:0;z-index:300;background:repeating-linear-gradient(45deg,var(--week),var(--week) 14px,#e0a000 14px,#e0a000 28px);color:#000;font-weight:800;font-size:13px;padding:9px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 14px rgba(0,0,0,.5)';
+      document.body.insertBefore(bar, document.body.firstChild); }
+    const when=run&&run.created_at?new Date(run.created_at).toLocaleString():'';
+    bar.innerHTML=`<span>📁 HISTORICAL VIEW · READ-ONLY &nbsp;—&nbsp; Run #${run.run_id||'?'} · ${esc(run.source||'')} · ${esc(when)}</span>
+      <button onclick="exitHistorical()" style="cursor:pointer;border:0;background:var(--green);color:#000;font-family:inherit;font-weight:800;font-size:12px;padding:6px 16px;border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.35)">↩ Return to Live View</button>`;
+    ['refreshBtn','snykSyncBtn','tenableSyncBtn'].forEach(idd=>{const e=document.getElementById(idd); if(e){e.disabled=true; e.style.opacity=.4; e.style.pointerEvents='none';}});
+    const dz=document.getElementById('dropzone'); if(dz){ dz.style.opacity=.4; dz.style.pointerEvents='none'; }
+  } else {
+    if(bar) bar.remove();
+    ['refreshBtn','snykSyncBtn','tenableSyncBtn'].forEach(idd=>{const e=document.getElementById(idd); if(e){e.disabled=false; e.style.opacity=1; e.style.pointerEvents='';}});
+    const dz=document.getElementById('dropzone'); if(dz){ dz.style.opacity=1; dz.style.pointerEvents=''; }
+  }
+}
+async function exitHistorical(){
+  // Close any open finding modal first so a stale historical finding doesn't
+  // stay on screen behind the live data refresh.
+  try{ closeModal(); }catch(e){}
+  setHistoricalMode(false);
+  const ok = await loadLiveData('exit-history');
+  // belt-and-suspenders: refreshViews is already called inside loadLiveData on
+  // success, but force one more pass so any view that depends on globals that
+  // were swapped by applyData is guaranteed to repaint.
+  if(ok){ try{ refreshViews(); }catch(e){} }
+  // jump to overview so the user sees the live posture, not whichever tab the
+  // historical run was last left on.
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  const ov=document.querySelector('.tab[data-v="overview"]'); if(ov) ov.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const ovv=document.getElementById('v-overview'); if(ovv) ovv.classList.add('active');
+  window.scrollTo(0,0);
+}
+async function runCompare(){
+  const f=document.getElementById('cmpFrom').value, t=document.getElementById('cmpTo').value;
+  const box=document.getElementById('cmpResult'); box.innerHTML='Comparing…';
+  const c=await fetch(`${BACKEND_URL}/api/history/compare?from=${f}&to=${t}`).then(r=>r.json());
+  if(!c.enabled||c.error){ box.innerHTML='Comparison unavailable.'; return; }
+  const delta=(o,n,pct,inv)=>{const d=n-o;const good=inv?d<0:d>0;const col=d===0?'var(--muted2)':(good?'var(--crit)':'var(--ok)');return `<span style="color:${col};font-weight:700">${o} → ${n} (${pct>0?'+':''}${pct}%)</span>`;};
+  box.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+      <div class="stat-card"><div style="font-size:11px;color:var(--muted2)">P1 Findings</div>${delta(c.p1.from,c.p1.to,c.p1.pct_change,true)}</div>
+      <div class="stat-card"><div style="font-size:11px;color:var(--muted2)">Attack Chains</div>${delta(c.chains.from,c.chains.to,c.chains.pct_change,true)}</div>
+      <div class="stat-card"><div style="font-size:11px;color:var(--muted2)">Risk Score</div>${delta(c.risk.from,c.risk.to,c.risk.pct_change,true)}</div>
+      <div class="stat-card"><div style="font-size:11px;color:var(--muted2)">Findings</div><span style="color:var(--ok)">−${c.findings.resolved} resolved</span> · <span style="color:var(--crit)">+${c.findings.new} new</span></div>
+    </div>
+    <div style="margin-top:12px;font-size:12px">
+      <div style="color:var(--ok);font-weight:700;margin-bottom:4px">Most improved assets</div>${(c.most_improved_assets||[]).map(a=>`<span class="chip" style="color:var(--ok)">${esc(a.asset)} ${a.delta}</span>`).join('')||'<span style="color:var(--muted2)">none</span>'}
+      <div style="color:var(--crit);font-weight:700;margin:8px 0 4px">Most regressed assets</div>${(c.most_regressed_assets||[]).map(a=>`<span class="chip" style="color:var(--crit)">${esc(a.asset)} +${a.delta}</span>`).join('')||'<span style="color:var(--muted2)">none</span>'}
+      <div style="color:var(--crit);font-weight:700;margin:8px 0 4px">Top new attack paths</div>${(c.chains.new_sample||[]).slice(0,6).map(x=>`<div style="font-size:11px;color:var(--muted)">• ${esc(x.objective||'path')} (conf ${Math.round(x.confidence)}) ${(x.products||[]).map(p=>esc(p)).join(' + ')}</div>`).join('')||'<span style="color:var(--muted2)">none</span>'}
+    </div>`;
+}
+function renderTrend(){
+  const box=document.getElementById('trendBox'); if(!box) return;
+  fetch(BACKEND_URL+'/api/history/trends').then(r=>r.json()).then(d=>{
+    const runs=(d.runs||[]); if(!runs.length){ box.innerHTML='no data'; return; }
+    const spark=(key,col)=>{const vals=runs.map(r=>r[key]||0);const mx=Math.max(1,...vals);return `<div style="display:flex;align-items:flex-end;gap:2px;height:40px">${vals.map(v=>`<div title="${v}" style="flex:1;background:${col};height:${Math.max(3,v/mx*40)}px;border-radius:1px"></div>`).join('')}</div>`;};
+    box.innerHTML=`<div style="font-size:12px;color:var(--muted)">${runs.length} runs · oldest → newest</div>
+      <div style="margin-top:8px"><div style="font-size:11px;color:var(--crit)">P1 findings</div>${spark('p1','var(--crit)')}</div>
+      <div style="margin-top:8px"><div style="font-size:11px;color:var(--week)">Attack chains</div>${spark('chains','var(--week)')}</div>
+      <div style="margin-top:8px"><div style="font-size:11px;color:var(--month)">Risk score</div>${spark('risk','var(--month)')}</div>`;
+  });
+}
+
+/* Pull the full live engine state (all findings/chains/graph/brief for every
+   file uploaded this session) and re-render. Safe to call repeatedly. */
+async function loadLiveData(reason){
+  if(!BACKEND_URL) return false;
+  if(HISTORICAL_MODE && reason!=='exit-history'){ setHistoricalMode(false); }
+  const lbl=document.getElementById('refreshLbl');
+  const btn=document.getElementById('refreshBtn');
+  if(lbl) lbl.textContent='Loading…';
+  if(btn) btn.disabled=true;
+  try{
+    const snap = await fetch(BACKEND_URL+'/api/snapshot',{cache:'no-store'}).then(r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    });
+    applyData(snap);
+    refreshViews();
+    console.log('VulnIQ: live data loaded'+(reason?' ('+reason+')':'')+
+      ' — '+(S.total_findings||0)+' findings, '+(S.total_chains||0)+' chains.');
+    if(lbl){ lbl.textContent='✓ '+(S.total_findings||0)+' findings'; setTimeout(()=>{if(lbl)lbl.textContent='Refresh';},2200); }
+    if(btn) btn.disabled=false;
+    return true;
+  }catch(e){
+    console.log('VulnIQ: live snapshot unavailable ('+e.message+') — keeping current data. '+
+      'Is the backend running with the /api/snapshot endpoint? Restart uvicorn if you upgraded.');
+    if(lbl){ lbl.textContent='⚠ offline'; setTimeout(()=>{if(lbl)lbl.textContent='Refresh';},2600); }
+    if(btn) btn.disabled=false;
+    return false;
+  }
+}
+
+/* ---- live backend status sync ---- */
+async function syncLiveStatus(){
+  if(!BACKEND_URL) return;
+  try{
+    const h = await fetch(BACKEND_URL+'/api/health').then(r=>r.json());
+    if(h && h.llm){
+      console.log('VulnIQ: live backend connected, LLM active ('+(h.model||'')+')');
+    } else {
+      console.log('VulnIQ: backend reachable but llm:false - check ANTHROPIC_API_KEY in the uvicorn terminal.');
+    }
+    // Whether or not the LLM is on, load the real engine state and re-render.
+    await loadLiveData('startup');
+  }catch(e){
+    console.log('VulnIQ: backend not reachable at '+BACKEND_URL+' - running on baked-in snapshot.');
+  }
+}
+
+shell();
+syncLiveStatus();
+</script>
+</body>
+</html>
